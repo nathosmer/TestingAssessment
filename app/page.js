@@ -26,6 +26,33 @@ function sc(s) { return s > 3.5 ? 'var(--gr)' : s > 2.5 ? 'var(--bl)' : s > 2.0 
 
 function getInviteToken() { if (typeof window === 'undefined') return null; var p = new URLSearchParams(window.location.search); return p.get('invite') || null; }
 
+var TextInput = React.memo(function TextInput(props) {
+  var _s = useState(props.value || '');
+  var local = _s[0]; var setLocal = _s[1];
+  var timerRef = useRef(null);
+  var onChangeRef = useRef(props.onChange);
+  onChangeRef.current = props.onChange;
+
+  useEffect(function() { setLocal(props.value || ''); }, [props.value]);
+
+  function handleChange(e) {
+    var v = e.target.value;
+    setLocal(v);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(function() { onChangeRef.current(v); }, 800);
+  }
+
+  function handleBlur() {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    onChangeRef.current(local);
+  }
+
+  if (props.rows) {
+    return React.createElement('textarea', { className: 'inp', rows: props.rows, value: local, onChange: handleChange, onBlur: handleBlur, placeholder: props.placeholder || '' });
+  }
+  return React.createElement('input', { className: 'inp', type: props.type || 'text', style: props.style, value: local, onChange: handleChange, onBlur: handleBlur, placeholder: props.placeholder || '' });
+});
+
 export default function App() {
   var [ready, setReady] = useState(false);
   var [loading, setLoading] = useState(null);
@@ -182,6 +209,14 @@ export default function App() {
       catch (e) { prompt('Share this invite link:', r.invite_url); }
     }
     setIE('');
+    var inv = await G('assess?action=invites&org_id=' + activeOrg); setInvites(inv.invites || []);
+  }
+
+  async function revokeInvite(invUuid) {
+    if (!confirm('Revoke this invitation? The invite link will no longer work.')) return;
+    var r = await P('assess?action=revoke_invite&org_id=' + activeOrg, { invite_uuid: invUuid });
+    if (r.error) { alert(r.error); return; }
+    toast('Invite revoked');
     var inv = await G('assess?action=invites&org_id=' + activeOrg); setInvites(inv.invites || []);
   }
 
@@ -388,9 +423,9 @@ export default function App() {
             React.createElement('div', { className: 'q-text' }, q.code, '  ', q.question_text),
             (q.question_type === 'yn' || q.question_type === 'select') ? React.createElement('div', { className: 'q-opts' }, opts.map(function(o) { return React.createElement('span', { key: o, className: 'q-opt' + (answers[q.code] === o ? ' sel' : ''), onClick: function() { setA(q.code, o); } }, o); })) : null,
             q.question_type === 'select_multi' ? React.createElement('div', { className: 'q-opts' }, opts.map(function(o) { var cur = answers[q.code]; var arr = Array.isArray(cur) ? cur : []; return React.createElement('span', { key: o, className: 'q-opt' + (arr.includes(o) ? ' sel' : ''), onClick: function() { var a = arr.slice(); var idx = a.indexOf(o); if (idx >= 0) a.splice(idx, 1); else a.push(o); setA(q.code, a); } }, o); })) : null,
-            q.question_type === 'free_text' ? React.createElement('textarea', { className: 'inp', rows: 3, value: answers[q.code] || '', onChange: function(e) { setA(q.code, e.target.value); }, placeholder: 'Enter your answer...' }) : null,
+            q.question_type === 'free_text' ? React.createElement(TextInput, { key: 'ti_' + q.code, code: q.code, rows: 3, value: answers[q.code] || '', onChange: function(v) { setA(q.code, v); }, placeholder: 'Enter your answer...' }) : null,
             q.question_type === 'likert' ? React.createElement('div', { className: 'q-opts' }, [1, 2, 3, 4, 5].map(function(v) { return React.createElement('span', { key: v, className: 'q-opt' + (String(answers[q.code]) === String(v) ? ' sel' : ''), onClick: function() { setA(q.code, String(v)); } }, v); })) : null,
-            q.question_type === 'number' ? React.createElement('input', { className: 'inp', type: 'number', style: { maxWidth: 150 }, value: answers[q.code] || '', onChange: function(e) { setA(q.code, e.target.value); } }) : null
+            q.question_type === 'number' ? React.createElement(TextInput, { key: 'ti_' + q.code, code: q.code, type: 'number', style: { maxWidth: 150 }, value: answers[q.code] || '', onChange: function(v) { setA(q.code, v); } }) : null
           );
         })
       ),
@@ -398,14 +433,14 @@ export default function App() {
         React.createElement('h3', { style: { fontSize: 14, fontWeight: 700, color: 'var(--g)', marginBottom: 12, letterSpacing: 1, textTransform: 'uppercase' } }, 'In Your Own Words'),
         oeQs.map(function(q) { return React.createElement('div', { key: q.code, className: 'q-block' },
           React.createElement('div', { className: 'q-text' }, q.code, '  ', q.question_text),
-          React.createElement('textarea', { className: 'inp', rows: 3, value: answers[q.code] || '', onChange: function(e) { setA(q.code, e.target.value); }, placeholder: "Write as much or as little as you'd like." })
+          React.createElement(TextInput, { key: 'ti_' + q.code, code: q.code, rows: 3, value: answers[q.code] || '', onChange: function(v) { setA(q.code, v); }, placeholder: "Write as much or as little as you'd like." })
         ); })
       ) : null,
       React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
         React.createElement('h3', { style: { fontSize: 14, fontWeight: 700, color: 'var(--g)', marginBottom: 8, letterSpacing: 1, textTransform: 'uppercase' } }, 'Emotional Pulse: ', SNAMES[curSec]),
         React.createElement('p', { className: 'mt', style: { marginBottom: 8 } }, 'Pick up to 3 words that come to mind:'),
         React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } }, ELABELS.map(function(w, i) { return React.createElement('span', { key: w, className: 'emo-w' + (pWords.includes(EWORDS[i]) ? ' sel' : ''), onClick: function() { setPulseW(pKey, EWORDS[i]); } }, w); })),
-        React.createElement('textarea', { className: 'inp', rows: 2, style: { marginTop: 8 }, placeholder: 'Why those words? (optional)', value: pWhy, onChange: function(e) { setPulses(function(prev) { var n = Object.assign({}, prev); n[pKey] = { words: pWords, why: e.target.value }; return n; }); } })
+        React.createElement(TextInput, { key: 'pulse_' + pKey, rows: 2, style: { marginTop: 8 }, placeholder: 'Why those words? (optional)', value: pWhy, onChange: function(v) { setPulses(function(prev) { var n = Object.assign({}, prev); n[pKey] = { words: pWords, why: v }; return n; }); } })
       ),
       React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between' } },
         React.createElement('button', { className: 'btn btn-o', disabled: curSec <= 1, onClick: async function() { await saveAnswerBatch(curSec); await savePulse(pKey, curSec, pWords, pWhy); setCurSec(curSec - 1); } }, '← Previous'),
@@ -563,7 +598,7 @@ export default function App() {
                 : React.createElement('button', { className: 'btn btn-g', disabled: generating, onClick: genReport }, generating ? 'Generating...' : 'Generate Report')
             )
           ),
-          React.createElement('div', { style: { marginTop: 16 } }, React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12 }, onClick: function() { setOF(Object.assign({ id: co.id }, co)); setPage('org_edit'); } }, 'Edit Organization'))
+          React.createElement('div', { style: { marginTop: 16, display: 'flex', gap: 8 } }, React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12 }, onClick: function() { setOF(Object.assign({ id: co.id }, co)); setPage('org_edit'); } }, 'Edit Organization'), React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12 }, onClick: function() { setOF({ name: '' }); setPage('org_edit'); } }, '+ Add Organization'))
         ) : null
       ) : null,
 
@@ -583,7 +618,8 @@ export default function App() {
           invites.map(function(inv, i) { return React.createElement('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < invites.length - 1 ? '1px solid var(--bg)' : 'none' } },
             React.createElement('div', { style: { width: 32, height: 32, borderRadius: '50%', background: 'var(--sl)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 } }, (inv.email || '?')[0].toUpperCase()),
             React.createElement('div', { style: { flex: 1 } }, React.createElement('div', { style: { fontSize: 14, fontWeight: 600 } }, inv.email)),
-            React.createElement('span', { style: { fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 4, background: inv.status === 'completed' ? 'rgba(39,137,107,.12)' : 'rgba(212,136,15,.12)', color: inv.status === 'completed' ? 'var(--gr)' : 'var(--am)' } }, inv.status)
+            React.createElement('span', { style: { fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 4, background: inv.status === 'completed' ? 'rgba(39,137,107,.12)' : inv.status === 'revoked' ? 'rgba(200,50,50,.12)' : 'rgba(212,136,15,.12)', color: inv.status === 'completed' ? 'var(--gr)' : inv.status === 'revoked' ? '#c83232' : 'var(--am)' } }, inv.status),
+            inv.status === 'pending' ? React.createElement('button', { style: { fontSize: 11, padding: '3px 8px', borderRadius: 4, border: '1px solid rgba(200,50,50,.3)', background: 'transparent', color: '#c83232', cursor: 'pointer', fontWeight: 600 }, onClick: function() { revokeInvite(inv.uuid); } }, 'Revoke') : null
           ); })
         ) : null
       ) : null

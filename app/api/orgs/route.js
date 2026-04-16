@@ -20,14 +20,23 @@ export async function GET(request) {
 
     if (!orgId) {
       const result = await sql`
-        SELECT o.*, (SELECT COUNT(*) FROM assessments WHERE org_id = o.id) as assessment_count
+        SELECT o.*, (SELECT COUNT(*) FROM assessments WHERE org_id = o.id) as assessment_count, 'owner' as user_role
         FROM organizations o WHERE o.owner_id = ${user.id} AND o.deleted_at IS NULL
-        ORDER BY o.updated_at DESC
+        UNION
+        SELECT DISTINCT o.*, (SELECT COUNT(*) FROM assessments WHERE org_id = o.id) as assessment_count, 'member' as user_role
+        FROM organizations o
+        JOIN invites i ON i.org_id = o.id
+        WHERE i.email = ${user.email} AND i.status IN ('accepted','started','completed')
+        AND o.deleted_at IS NULL AND o.owner_id != ${user.id}
+        ORDER BY updated_at DESC
       `;
       return respond({ orgs: result.rows });
     }
 
-    const result = await sql`SELECT * FROM organizations WHERE id = ${orgId} AND owner_id = ${user.id} AND deleted_at IS NULL`;
+    let result = await sql`SELECT * FROM organizations WHERE id = ${orgId} AND owner_id = ${user.id} AND deleted_at IS NULL`;
+    if (result.rows.length === 0) {
+      result = await sql`SELECT o.* FROM organizations o JOIN invites i ON i.org_id = o.id WHERE o.id = ${orgId} AND i.email = ${user.email} AND i.status IN ('accepted','started','completed') AND o.deleted_at IS NULL LIMIT 1`;
+    }
     const org = result.rows[0];
     if (!org) return respond({ error: 'Not found' }, 404);
 

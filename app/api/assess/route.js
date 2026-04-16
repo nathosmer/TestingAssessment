@@ -320,6 +320,19 @@ export async function POST(request) {
     return respond({ ok: true, invite_url: inviteUrl, token, email_sent: emailResult.sent }, 201);
   }
 
+  // Revoke invite
+  if (action === 'revoke_invite') {
+    if (!isOwner) return respond({ error: 'Admin only' }, 403);
+    const invUuid = input.invite_uuid || '';
+    if (!invUuid) return respond({ error: 'invite_uuid required' }, 400);
+    const inv = await sql`SELECT id, status FROM invites WHERE uuid = ${invUuid} AND org_id = ${orgId}`;
+    if (inv.rows.length === 0) return respond({ error: 'Invite not found' }, 404);
+    if (inv.rows[0].status !== 'pending') return respond({ error: 'Only pending invites can be revoked' }, 400);
+    await sql`UPDATE invites SET status = 'revoked' WHERE id = ${inv.rows[0].id}`;
+    await sql`DELETE FROM respondents WHERE invite_id = ${inv.rows[0].id} AND status = 'invited'`;
+    return respond({ ok: true });
+  }
+
   return respond({ error: 'Bad request' }, 400);
   } catch (error) {
     console.error('POST assess error:', error);
