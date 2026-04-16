@@ -10,8 +10,10 @@ function toast(msg) { var el = document.getElementById('toast'); if (!el) return
 async function api(u, o) {
   var h = { 'Content-Type': 'application/json' }; var t = tk(); if (t) h['Authorization'] = 'Bearer ' + t;
   try { var r = await fetch(u, Object.assign({ headers: h }, o || {})); var j = await r.json();
-    if (r.status === 401) { setTk(null); location.reload(); } return j; }
-  catch (e) { return { error: 'Network error: ' + e.message }; }
+    if (r.status === 401) { setTk(null); location.reload(); }
+    if (!r.ok && r.status !== 401 && j.error) { toast('Error: ' + j.error); }
+    return j; }
+  catch (e) { toast('Network error'); return { error: 'Network error: ' + e.message }; }
 }
 var G = function(u) { return api(API + '/' + u); };
 var P = function(u, b) { return api(API + '/' + u, { method: 'POST', body: JSON.stringify(b) }); };
@@ -42,6 +44,7 @@ export default function App() {
   var [pendingInvite, setPI] = useState(null);
 
   var saveTimer = useRef(null);
+  var [saveStatus, setSaveStatus] = useState('');
 
   useEffect(function() {
     setPI(getInviteToken());
@@ -128,6 +131,7 @@ export default function App() {
 
   function setA(code, val) {
     setAnswers(function(prev) { var n = Object.assign({}, prev); n[code] = val; return n; });
+    setSaveStatus('unsaved');
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(function() {
       if (activeOrg && curSec >= 1 && curSec <= 13) saveAnswerBatch(curSec);
@@ -138,7 +142,7 @@ export default function App() {
     if (!activeOrg) return;
     var secQ = questions.filter(function(q) { return q.section_number === secNum && q.part === 'S'; });
     var batch = secQ.map(function(q) { return { code: q.code, value: answers[q.code] || '', section: secNum }; }).filter(function(a) { return a.value !== ''; });
-    if (batch.length > 0) { var r = await P('assess?action=save_answers&org_id=' + activeOrg, { answers: batch }); if (r.ok) toast('Saved'); }
+    if (batch.length > 0) { var r = await P('assess?action=save_answers&org_id=' + activeOrg, { answers: batch }); if (r.ok) { setSaveStatus('saved'); setTimeout(function() { setSaveStatus(''); }, 2000); } else { setSaveStatus('error'); } }
   }
 
   async function savePulse(point, secNum, words, why) {
@@ -245,7 +249,10 @@ export default function App() {
       { k: 'contractors', l: 'Contractors (A7)', t: 'number' },
       { k: 'volunteers', l: 'Volunteers (A8)', t: 'select', o: ['None', '1–10', '11–25', '26–50', '51–100', 'Over 100'] },
       { k: 'locations', l: 'Locations (A9)', t: 'select', o: ['1', '2–3', '4–10', 'Over 10'] },
-      { k: 'address_street', l: 'Address (A10)', t: 'text', ph: 'Street, City, State, ZIP' },
+      { k: 'address_street', l: 'Street Address (A10)', t: 'text', ph: '123 Main St' },
+      { k: 'address_city', l: 'City', t: 'text', ph: 'Springfield' },
+      { k: 'address_state', l: 'State', t: 'text', ph: 'IL' },
+      { k: 'address_zip', l: 'ZIP Code', t: 'text', ph: '62701' },
       { k: 'payroll_method', l: 'Payroll (A12)', t: 'select', o: ['Outsourced (ADP, Gusto, Paychex, etc.)', 'In-house with software', 'Manual', 'Accountant handles it', 'No paid employees'] },
       { k: 'last_audit', l: 'Last Audit (A13)', t: 'select', o: ['Within 2 years', '3–5 years ago', '6+ years ago', 'Review only', 'Never', 'Not sure'] },
       { k: 'federal_funding', l: 'Federal Funding (A14)', t: 'select', o: ['Yes, over $750K/yr', 'Yes, under $750K', 'Occasionally', 'No', 'Not sure'] },
@@ -297,16 +304,16 @@ export default function App() {
           React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Years Involved (B3)'), React.createElement('input', { className: 'inp', type: 'number', value: pf.years_involved, onChange: function(e) { setPf(Object.assign({}, pf, { years_involved: e.target.value })); } })),
           React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Paid or Volunteer (B4)'), React.createElement('select', { className: 'inp', value: pf.paid_volunteer, onChange: function(e) { setPf(Object.assign({}, pf, { paid_volunteer: e.target.value })); } }, React.createElement('option', { value: '' }, 'Select...'), ['Full-time paid', 'Part-time paid', 'Volunteer', 'Contract', 'Stipend'].map(function(o) { return React.createElement('option', { key: o, value: o }, o); }))),
           React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Finance Involvement (B5)'), React.createElement('select', { className: 'inp', value: pf.finance_involvement, onChange: function(e) { setPf(Object.assign({}, pf, { finance_involvement: e.target.value })); } }, React.createElement('option', { value: '' }, 'Select...'), finOpts.map(function(o) { return React.createElement('option', { key: o, value: o }, o); }))),
-          React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Mission in your own words (B6)'), React.createElement('textarea', { className: 'inp', rows: 2, value: pf.mission_description, onChange: function(e) { setPf(Object.assign({}, pf, { mission_description: e.target.value })); } })),
-          React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Recent highlight (B7)'), React.createElement('textarea', { className: 'inp', rows: 2, value: pf.recent_highlight, onChange: function(e) { setPf(Object.assign({}, pf, { recent_highlight: e.target.value })); } })),
+          React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Mission in your own words (B6)'), React.createElement('textarea', { className: 'inp', rows: 4, value: pf.mission_description, onChange: function(e) { setPf(Object.assign({}, pf, { mission_description: e.target.value })); } })),
+          React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Recent highlight (B7)'), React.createElement('textarea', { className: 'inp', rows: 4, value: pf.recent_highlight, onChange: function(e) { setPf(Object.assign({}, pf, { recent_highlight: e.target.value })); } })),
           React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Mission alignment 1-5 (B8)'), React.createElement('div', { className: 'q-opts' }, [1, 2, 3, 4, 5].map(function(v) { return React.createElement('span', { key: v, className: 'q-opt' + (pf.mission_alignment == v ? ' sel' : ''), onClick: function() { setPf(Object.assign({}, pf, { mission_alignment: v })); } }, v, v === 1 ? ' Not at all' : v === 5 ? ' Fully aligned' : ''); }))),
           React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Financial health (B9)'), React.createElement('div', { className: 'q-opts' }, healthOpts.map(function(v) { return React.createElement('span', { key: v, className: 'q-opt' + (pf.financial_health_rating === v ? ' sel' : ''), onClick: function() { setPf(Object.assign({}, pf, { financial_health_rating: v })); } }, v); }))),
-          React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Anything weighing on you? (B10)'), React.createElement('textarea', { className: 'inp', rows: 2, value: pf.concerns_text, onChange: function(e) { setPf(Object.assign({}, pf, { concerns_text: e.target.value })); }, placeholder: 'Optional' })),
+          React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Anything weighing on you? (B10)'), React.createElement('textarea', { className: 'inp', rows: 3, value: pf.concerns_text, onChange: function(e) { setPf(Object.assign({}, pf, { concerns_text: e.target.value })); }, placeholder: 'Optional' })),
           React.createElement('div', { style: { marginBottom: 14, padding: 16, background: 'var(--bg)', borderRadius: 8 } },
             React.createElement('label', { className: 'lbl', style: { color: 'var(--g)' } }, 'Initial Emotional Pulse'),
             React.createElement('p', { className: 'mt', style: { marginBottom: 8 } }, 'Pick up to 3 words:'),
             React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } }, ELABELS.map(function(w, i) { return React.createElement('span', { key: w, className: 'emo-w' + (ipWords.includes(EWORDS[i]) ? ' sel' : ''), onClick: function() { var ws = ipWords.slice(); var idx = ws.indexOf(EWORDS[i]); if (idx >= 0) ws.splice(idx, 1); else if (ws.length < 3) ws.push(EWORDS[i]); setIPW(ws); } }, w); })),
-            React.createElement('input', { className: 'inp', style: { marginTop: 8 }, placeholder: 'Why those words? (optional)', value: ipWhy, onChange: function(e) { setIPWhy(e.target.value); } })
+            React.createElement('textarea', { className: 'inp', rows: 2, style: { marginTop: 8 }, placeholder: 'Why those words? (optional)', value: ipWhy, onChange: function(e) { setIPWhy(e.target.value); } })
           ),
           React.createElement('button', { className: 'btn btn-g', disabled: !pf.role, onClick: async function() { await saveProfile(pf); await savePulse('initial', 0, ipWords, ipWhy); setCurSec(1); } }, 'Continue to Assessment')
         )
@@ -321,7 +328,7 @@ export default function App() {
           return React.createElement('div', { key: s, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: s < 13 ? '1px solid var(--bg)' : 'none', cursor: 'pointer' }, onClick: function() { setCurSec(s); } },
             React.createElement('span', { style: { fontWeight: 700, color: 'var(--g)', width: 24 } }, s),
             React.createElement('span', { style: { flex: 1, fontWeight: 500 } }, SNAMES[s]),
-            started ? React.createElement('span', { style: { fontSize: 11, color: 'var(--gr)' } }, '✓ Started') : React.createElement('span', { className: 'mt' }, '—')
+            (function() { var answered = secQs(s).filter(function(q) { return answers[q.code]; }).length; var total = secQs(s).length; return answered > 0 ? React.createElement('span', { style: { fontSize: 11, color: answered === total ? 'var(--gr)' : 'var(--am)' } }, answered, '/', total, answered === total ? ' ✓' : '') : React.createElement('span', { className: 'mt' }, '0/', total); })()
           );
         }),
         React.createElement('div', { style: { marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--br)' } },
@@ -344,9 +351,10 @@ export default function App() {
             React.createElement('label', { className: 'lbl', style: { color: 'var(--g)' } }, 'Final Emotional Pulse'),
             React.createElement('p', { className: 'mt', style: { marginBottom: 8 } }, 'Pick up to 3:'),
             React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } }, ELABELS.map(function(w, i) { return React.createElement('span', { key: w, className: 'emo-w' + (fpW.includes(EWORDS[i]) ? ' sel' : ''), onClick: function() { var ws = fpW.slice(); var idx = ws.indexOf(EWORDS[i]); if (idx >= 0) ws.splice(idx, 1); else if (ws.length < 3) ws.push(EWORDS[i]); setFPW(ws); } }, w); })),
-            React.createElement('input', { className: 'inp', style: { marginTop: 8 }, placeholder: 'Why? (optional)', value: fpWhy, onChange: function(e) { setFPWhy(e.target.value); } })
+            React.createElement('textarea', { className: 'inp', rows: 2, style: { marginTop: 8 }, placeholder: 'Why? (optional)', value: fpWhy, onChange: function(e) { setFPWhy(e.target.value); } })
           ),
           React.createElement('button', { className: 'btn btn-g', onClick: async function() {
+            if (!confirm('Are you sure you want to submit your assessment? This action cannot be undone.')) return;
             await P('assess?action=save_answers&org_id=' + activeOrg, { answers: [{ code: 'F1', value: fr.F1, section: 14 }, { code: 'F2', value: fr.F2, section: 14 }, { code: 'F3', value: fr.F3, section: 14 }, { code: 'F4', value: fr.F4, section: 14 }].filter(function(a) { return a.value; }) });
             await savePulse('final', 14, fpW, fpWhy);
             await completeAssessment(fr.F4);
@@ -371,6 +379,7 @@ export default function App() {
         React.createElement('span', { className: 'mt' }, curSec, '/13')
       ),
       React.createElement('div', { className: 'prg' }, React.createElement('div', { className: 'prg-f', style: { width: (curSec / 13 * 100) + '%' } })),
+      saveStatus ? React.createElement('div', { style: { fontSize: 11, textAlign: 'right', marginBottom: 8, color: saveStatus === 'saved' ? 'var(--gr)' : saveStatus === 'error' ? 'var(--r)' : 'var(--am)' } }, saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'error' ? 'Save failed' : 'Unsaved changes...') : null,
       React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
         React.createElement('h3', { style: { fontSize: 14, fontWeight: 700, color: 'var(--g)', marginBottom: 12, letterSpacing: 1, textTransform: 'uppercase' } }, 'Questions'),
         factQs.map(function(q) {
@@ -379,7 +388,7 @@ export default function App() {
             React.createElement('div', { className: 'q-text' }, q.code, '  ', q.question_text),
             (q.question_type === 'yn' || q.question_type === 'select') ? React.createElement('div', { className: 'q-opts' }, opts.map(function(o) { return React.createElement('span', { key: o, className: 'q-opt' + (answers[q.code] === o ? ' sel' : ''), onClick: function() { setA(q.code, o); } }, o); })) : null,
             q.question_type === 'select_multi' ? React.createElement('div', { className: 'q-opts' }, opts.map(function(o) { var cur = answers[q.code]; var arr = Array.isArray(cur) ? cur : []; return React.createElement('span', { key: o, className: 'q-opt' + (arr.includes(o) ? ' sel' : ''), onClick: function() { var a = arr.slice(); var idx = a.indexOf(o); if (idx >= 0) a.splice(idx, 1); else a.push(o); setA(q.code, a); } }, o); })) : null,
-            q.question_type === 'free_text' ? React.createElement('input', { className: 'inp', value: answers[q.code] || '', onChange: function(e) { setA(q.code, e.target.value); }, placeholder: 'Enter...' }) : null,
+            q.question_type === 'free_text' ? React.createElement('textarea', { className: 'inp', rows: 3, value: answers[q.code] || '', onChange: function(e) { setA(q.code, e.target.value); }, placeholder: 'Enter your answer...' }) : null,
             q.question_type === 'likert' ? React.createElement('div', { className: 'q-opts' }, [1, 2, 3, 4, 5].map(function(v) { return React.createElement('span', { key: v, className: 'q-opt' + (String(answers[q.code]) === String(v) ? ' sel' : ''), onClick: function() { setA(q.code, String(v)); } }, v); })) : null,
             q.question_type === 'number' ? React.createElement('input', { className: 'inp', type: 'number', style: { maxWidth: 150 }, value: answers[q.code] || '', onChange: function(e) { setA(q.code, e.target.value); } }) : null
           );
@@ -396,7 +405,7 @@ export default function App() {
         React.createElement('h3', { style: { fontSize: 14, fontWeight: 700, color: 'var(--g)', marginBottom: 8, letterSpacing: 1, textTransform: 'uppercase' } }, 'Emotional Pulse: ', SNAMES[curSec]),
         React.createElement('p', { className: 'mt', style: { marginBottom: 8 } }, 'Pick up to 3 words that come to mind:'),
         React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } }, ELABELS.map(function(w, i) { return React.createElement('span', { key: w, className: 'emo-w' + (pWords.includes(EWORDS[i]) ? ' sel' : ''), onClick: function() { setPulseW(pKey, EWORDS[i]); } }, w); })),
-        React.createElement('input', { className: 'inp', style: { marginTop: 8 }, placeholder: 'Why those words? (optional)', value: pWhy, onChange: function(e) { setPulses(function(prev) { var n = Object.assign({}, prev); n[pKey] = { words: pWords, why: e.target.value }; return n; }); } })
+        React.createElement('textarea', { className: 'inp', rows: 2, style: { marginTop: 8 }, placeholder: 'Why those words? (optional)', value: pWhy, onChange: function(e) { setPulses(function(prev) { var n = Object.assign({}, prev); n[pKey] = { words: pWords, why: e.target.value }; return n; }); } })
       ),
       React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between' } },
         React.createElement('button', { className: 'btn btn-o', disabled: curSec <= 1, onClick: async function() { await saveAnswerBatch(curSec); await savePulse(pKey, curSec, pWords, pWhy); setCurSec(curSec - 1); } }, '← Previous'),
@@ -427,7 +436,11 @@ export default function App() {
 
     if (dashPage === 'dashboard') {
       content = React.createElement('div', null,
-        React.createElement('h1', { className: 'pg-t' }, 'Dashboard'), React.createElement('p', { className: 'pg-s' }, co ? co.name : '', '  ·  Financial Stewardship Assessment'),
+        React.createElement('h1', { className: 'pg-t' }, 'Dashboard'),
+        React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 } },
+          React.createElement('p', { className: 'pg-s' }, co ? co.name : '', '  ·  Financial Stewardship Assessment'),
+          React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12, padding: '5px 14px' }, onClick: function() { window.print(); } }, 'Print Report')
+        ),
         React.createElement('div', { className: 'mc-row' },
           React.createElement('div', { className: 'mc' }, React.createElement('div', { className: 'l' }, 'Overall Score'), React.createElement('div', { className: 'v', style: { color: sc(R.overall_score) } }, R.overall_score), React.createElement('div', { className: 's' }, 'out of 5.0')),
           React.createElement('div', { className: 'mc' }, React.createElement('div', { className: 'l' }, 'Risk Level'), React.createElement('div', { className: 'v', style: { color: R.risk_level === 'Elevated' || R.risk_level === 'Critical' ? 'var(--am)' : 'var(--bl)' } }, R.risk_level), React.createElement('div', { className: 's' }, PRIS.filter(function(p) { return p === 'HIGH'; }).length, ' of 13 HIGH')),

@@ -1,5 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { requireAuth, generateUUID, respond } from '../../../lib/auth';
+import { sendInviteEmail } from '../../../lib/email';
 
 async function getOrCreateResp(userId, orgId) {
   const a = await sql`SELECT id FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
@@ -8,6 +9,16 @@ async function getOrCreateResp(userId, orgId) {
 
   let r = await sql`SELECT * FROM respondents WHERE assessment_id = ${aid} AND user_id = ${userId}`;
   if (r.rows.length === 0) {
+    // Check for invite-linked respondent (H-04)
+    const userResult = await sql`SELECT email FROM users WHERE id = ${userId}`;
+    const userEmail = userResult.rows[0]?.email;
+    if (userEmail) {
+      const invCheck = await sql`SELECT r.* FROM respondents r JOIN invites i ON r.invite_id = i.id WHERE r.assessment_id = ${aid} AND i.email = ${userEmail} AND r.user_id IS NULL LIMIT 1`;
+      if (invCheck.rows.length > 0) {
+        await sql`UPDATE respondents SET user_id = ${userId} WHERE id = ${invCheck.rows[0].id}`;
+        return invCheck.rows[0];
+      }
+    }
     const uuid = generateUUID();
     await sql`INSERT INTO respondents (uuid, assessment_id, org_id, user_id, status) VALUES (${uuid}, ${aid}, ${orgId}, ${userId}, 'invited')`;
     r = await sql`SELECT * FROM respondents WHERE assessment_id = ${aid} AND user_id = ${userId}`;
@@ -24,65 +35,70 @@ export async function GET(request) {
   const action = searchParams.get('action') || '';
   const orgId = searchParams.get('org_id');
 
-  // Questions - requires auth
-  if (action === 'questions') {
-    const user = await requireAuth(request);
-    if (!user) return respond({ error: 'Not authenticated' }, 401);
-    if (!orgId) return respond({ error: 'org_id required' }, 400);
-    const trackResult = await sql`SELECT assessment_track FROM organizations WHERE id = ${orgId}`;
-    const track = trackResult.rows[0]?.assessment_track || 'nonprofit';
-    const qs = await sql`SELECT id, code, part, section_number, question_text, question_type, response_options, display_order, is_scorable, benchmark_value FROM questions WHERE assessment_track = ${track} AND version_retired IS NULL ORDER BY display_order`;
-    return respond({ questions: qs.rows });
-  }
-
-  // Get my assessment data
-  if (action === '' || action === null) {
-    const user = await requireAuth(request);
-    if (!user) return respond({ error: 'Not authenticated' }, 401);
-    if (!orgId) return respond({ error: 'org_id required' }, 400);
-    const resp = await getOrCreateResp(user.id, orgId);
-    if (!resp) return respond({ error: 'No assessment found' }, 404);
-
-    const answersResult = await sql`SELECT question_code, question_type, answer_raw, section_number FROM responses WHERE respondent_id = ${resp.id}`;
-    const answers = {};
-    for (const row of answersResult.rows) {
-      answers[row.question_code] = row.answer_raw;
+  try {
+    // Questions - requires auth
+    if (action === 'questions') {
+      const user = await requireAuth(request);
+      if (!user) return respond({ error: 'Not authenticated' }, 401);
+      if (!orgId) return respond({ error: 'org_id required' }, 400);
+      const trackResult = await sql`SELECT assessment_track FROM organizations WHERE id = ${orgId}`;
+      const track = trackResult.rows[0]?.assessment_track || 'nonprofit';
+      const qs = await sql`SELECT id, code, part, section_number, question_text, question_type, response_options, display_order, is_scorable, benchmark_value FROM questions WHERE assessment_track = ${track} AND version_retired IS NULL ORDER BY display_order`;
+      return respond({ questions: qs.rows });
     }
 
-    const pulsesResult = await sql`SELECT pulse_point, word_confident, word_concerned, word_overwhelmed, word_hopeful, word_uncertain, word_frustrated, word_encouraged, word_afraid, word_empowered, word_lost, why_text FROM emotional_pulses WHERE respondent_id = ${resp.id}`;
-    const pulses = {};
-    const wordKeys = ['confident','concerned','overwhelmed','hopeful','uncertain','frustrated','encouraged','afraid','empowered','lost'];
-    for (const row of pulsesResult.rows) {
-      const words = [];
-      for (const w of wordKeys) {
-        if (row['word_' + w]) words.push(w);
+    // Get my assessment data
+    if (action === '' || action === null) {
+      const user = await requireAuth(request);
+      if (!user) return respond({ error: 'Not authenticated' }, 401);
+      if (!orgId) return respond({ error: 'org_id required' }, 400);
+      const resp = await getOrCreateResp(user.id, orgId);
+      if (!resp) return respond({ error: 'No assessment found' }, 404);
+
+      const answersResult = await sql`SELECT question_code, question_type, answer_raw, section_number FROM responses WHERE respondent_id = ${resp.id}`;
+      const answers = {};
+      for (const row of answersResult.rows) {
+        answers[row.question_code] = row.answer_raw;
       }
-      pulses[row.pulse_point] = { words, why: row.why_text };
+
+      const pulsesResult = await sql`SELECT pulse_point, word_confident, word_concerned, word_overwhelmed, word_hopeful, word_uncertain, word_frustrated, word_encouraged, word_afraid, word_empowered, word_lost, why_text FROM emotional_pulses WHERE respondent_id = ${resp.id}`;
+      const pulses = {};
+      const wordKeys = ['confident','concerned','overwhelmed','hopeful','uncertain','frustrated','encouraged','afraid','empowered','lost'];
+      for (const row of pulsesResult.rows) {
+        const words = [];
+        for (const w of wordKeys) {
+          if (row['word_' + w]) words.push(w);
+        }
+        pulses[row.pulse_point] = { words, why: row.why_text };
+      }
+
+      return respond({ respondent: resp, answers, pulses });
     }
 
-    return respond({ respondent: resp, answers, pulses });
-  }
+    // Invites list
+    if (action === 'invites') {
+      const user = await requireAuth(request);
+      if (!user) return respond({ error: 'Not authenticated' }, 401);
+      if (!orgId) return respond({ error: 'org_id required' }, 400);
+      const inv = await sql`SELECT uuid, email, status, created_at FROM invites WHERE org_id = ${orgId} ORDER BY created_at DESC`;
+      return respond({ invites: inv.rows });
+    }
 
-  // Invites list
-  if (action === 'invites') {
-    const user = await requireAuth(request);
-    if (!user) return respond({ error: 'Not authenticated' }, 401);
-    if (!orgId) return respond({ error: 'org_id required' }, 400);
-    const inv = await sql`SELECT uuid, email, status, created_at FROM invites WHERE org_id = ${orgId} ORDER BY created_at DESC`;
-    return respond({ invites: inv.rows });
-  }
-
-  // Respondents list (admin)
-  if (action === 'respondents') {
-    const user = await requireAuth(request);
-    if (!user) return respond({ error: 'Not authenticated' }, 401);
-    if (!orgId) return respond({ error: 'org_id required' }, 400);
-    const ownerCheck = await sql`SELECT id FROM organizations WHERE id = ${orgId} AND owner_id = ${user.id}`;
-    if (ownerCheck.rows.length === 0) return respond({ error: 'Admin only' }, 403);
-    const a = await sql`SELECT id FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
-    if (a.rows.length === 0) return respond({ respondents: [] });
-    const r = await sql`SELECT uuid, role, role_category, status, progress_pct, financial_health_rating, started_at, completed_at FROM respondents WHERE assessment_id = ${a.rows[0].id}`;
-    return respond({ respondents: r.rows });
+    // Respondents list (admin)
+    if (action === 'respondents') {
+      const user = await requireAuth(request);
+      if (!user) return respond({ error: 'Not authenticated' }, 401);
+      if (!orgId) return respond({ error: 'org_id required' }, 400);
+      const ownerCheck = await sql`SELECT id FROM organizations WHERE id = ${orgId} AND owner_id = ${user.id}`;
+      if (ownerCheck.rows.length === 0) return respond({ error: 'Admin only' }, 403);
+      const a = await sql`SELECT id FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
+      if (a.rows.length === 0) return respond({ respondents: [] });
+      const r = await sql`SELECT uuid, role, role_category, status, progress_pct, financial_health_rating, started_at, completed_at FROM respondents WHERE assessment_id = ${a.rows[0].id}`;
+      return respond({ respondents: r.rows });
+    }
+  } catch (error) {
+    console.error('GET assess error:', error);
+    return respond({ error: 'Server error' }, 500);
   }
 
   return respond({ error: 'Bad request' }, 400);
@@ -94,8 +110,9 @@ export async function POST(request) {
   const orgId = searchParams.get('org_id');
   const input = await request.json().catch(() => ({}));
 
-  // Accept invite (public)
-  if (action === 'accept_invite') {
+  try {
+    // Accept invite (public)
+    if (action === 'accept_invite') {
     const token = input.token || '';
     if (!token) return respond({ error: 'Token required' }, 400);
     const inv = await sql`SELECT * FROM invites WHERE token = ${token} AND status = 'pending'`;
@@ -172,13 +189,17 @@ export async function POST(request) {
     const answers = input.answers || [];
     const aid = resp.assessment_id;
 
+    // Get track (M-09)
+    const trackResult = await sql`SELECT assessment_track FROM organizations WHERE id = ${orgId}`;
+    const track = trackResult.rows[0]?.assessment_track || 'nonprofit';
+
     for (const a of answers) {
       const code = a.code || '';
       let val = a.value;
       const sec = Number(a.section || 0);
       if (!code || val === '' || val === undefined) continue;
 
-      const qResult = await sql`SELECT id, question_type, benchmark_value, is_critical, critical_condition FROM questions WHERE code = ${code} AND assessment_track = 'nonprofit' AND version_retired IS NULL LIMIT 1`;
+      const qResult = await sql`SELECT id, question_type, benchmark_value, is_critical, critical_condition FROM questions WHERE code = ${code} AND assessment_track = ${track} AND version_retired IS NULL LIMIT 1`;
       const q = qResult.rows[0];
       if (!q) continue;
 
@@ -213,8 +234,8 @@ export async function POST(request) {
       }
     }
 
-    // Update progress
-    const total = await sql`SELECT COUNT(*) as cnt FROM questions WHERE part = 'S' AND assessment_track = 'nonprofit' AND version_retired IS NULL`;
+    // Update progress (H-06: only count scorable question types)
+    const total = await sql`SELECT COUNT(*) as cnt FROM questions WHERE part = 'S' AND assessment_track = ${track} AND version_retired IS NULL AND question_type NOT IN ('open_ended', 'free_text')`;
     const answered = await sql`SELECT COUNT(*) as cnt FROM responses WHERE respondent_id = ${resp.id} AND section_number BETWEEN 1 AND 13`;
     const totalCount = Number(total.rows[0].cnt) || 1;
     const answeredCount = Number(answered.rows[0].cnt);
@@ -289,8 +310,19 @@ export async function POST(request) {
     const rUuid = generateUUID();
     await sql`INSERT INTO respondents (uuid, assessment_id, org_id, invite_id, status) VALUES (${rUuid}, ${aid}, ${orgId}, ${invResult.rows[0].id}, 'invited')`;
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
-    return respond({ ok: true, invite_url: `${appUrl}/?invite=${token}`, token }, 201);
+    const inviteUrl = `${appUrl}/?invite=${token}`;
+
+    // Send email (C-01)
+    const orgResult2 = await sql`SELECT name FROM organizations WHERE id = ${orgId}`;
+    const orgName = orgResult2.rows[0]?.name || 'the organization';
+    const emailResult = await sendInviteEmail(email, inviteUrl, orgName);
+
+    return respond({ ok: true, invite_url: inviteUrl, token, email_sent: emailResult.sent }, 201);
   }
 
   return respond({ error: 'Bad request' }, 400);
+  } catch (error) {
+    console.error('POST assess error:', error);
+    return respond({ error: 'Server error' }, 500);
+  }
 }

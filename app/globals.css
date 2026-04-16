@@ -55,3 +55,23 @@ button,input,select,textarea{font-family:inherit}
 .toast{position:fixed;bottom:20px;right:20px;background:var(--n);color:var(--g);padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;z-index:200;opacity:0;transition:opacity .3s;pointer-events:none}
 .toast.show{opacity:1}
 @media(max-width:768px){.sb{display:none}.main-r{margin-left:0;padding:16px}.mc-row{grid-template-columns:1fr 1fr}}
+@media(max-width:768px){
+  .sb{position:relative;width:100%;height:auto;max-height:none}
+  .main-r{margin-left:0;padding:16px}
+  .mc-row{grid-template-columns:repeat(2,1fr);gap:10px}
+  .bar-l{width:100px;font-size:11px}
+  .main-c{padding:16px 12px 40px}
+}
+@media(max-width:480px){
+  .mc-row{grid-template-columns:1fr}
+  .q-opts{gap:4px}
+  .q-opt{padding:6px 10px;font-size:12px}
+}
+@media print{
+  .sb{display:none!important}
+  .main-r{margin-left:0!important}
+  .nav-top{display:none!important}
+  .btn{display:none!important}
+  .cta-card{display:none!important}
+}
+.q-opt:focus,.emo-w:focus{outline:2px solid var(--g);outline-offset:2px}

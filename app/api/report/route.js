@@ -22,24 +22,40 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const user = await requireAuth(request);
-  if (!user) return respond({ error: 'Not authenticated' }, 401);
-  const { searchParams } = new URL(request.url);
-  const orgId = searchParams.get('org_id');
-  if (!orgId) return respond({ error: 'org_id required' }, 400);
+  try {
+    const user = await requireAuth(request);
+    if (!user) return respond({ error: 'Not authenticated' }, 401);
+    const { searchParams } = new URL(request.url);
+    const orgId = searchParams.get('org_id');
+    if (!orgId) return respond({ error: 'org_id required' }, 400);
 
-  const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-  if (!ANTHROPIC_API_KEY) return respond({ error: 'ANTHROPIC_API_KEY not configured' }, 500);
+    const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+    if (!ANTHROPIC_API_KEY) return respond({ error: 'ANTHROPIC_API_KEY not configured' }, 500);
 
-  // Verify ownership
-  const orgResult = await sql`SELECT * FROM organizations WHERE id = ${orgId} AND owner_id = ${user.id}`;
-  const org = orgResult.rows[0];
-  if (!org) return respond({ error: 'Not found' }, 404);
+    // Verify ownership
+    const orgResult = await sql`SELECT * FROM organizations WHERE id = ${orgId} AND owner_id = ${user.id}`;
+    const org = orgResult.rows[0];
+    if (!org) return respond({ error: 'Not found' }, 404);
 
-  // Get assessment
-  const assessResult = await sql`SELECT id FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
-  if (assessResult.rows.length === 0) return respond({ error: 'No assessment' }, 404);
-  const aid = assessResult.rows[0].id;
+    // H-07: Check for existing recent report (generated within last 5 minutes)
+    const existing = await sql`SELECT uuid, report_json, respondent_count, overall_score, risk_level, created_at FROM reports WHERE org_id = ${orgId} AND created_at > NOW() - INTERVAL '5 minutes' ORDER BY created_at DESC LIMIT 1`;
+    if (existing.rows.length > 0) {
+      const row = existing.rows[0];
+      row.report_json = JSON.parse(row.report_json);
+      return respond({ report: row, cached: true });
+    }
+
+    // H-07: Check/set generating flag on assessment
+    const assessResult = await sql`SELECT id, status FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
+    if (assessResult.rows.length === 0) return respond({ error: 'No assessment' }, 404);
+    const aid = assessResult.rows[0].id;
+
+    if (assessResult.rows[0]?.status === 'generating') {
+      return respond({ error: 'Report generation already in progress' }, 409);
+    }
+
+    // Set generating status
+    await sql`UPDATE assessments SET status = 'generating' WHERE id = ${aid}`;
 
   // Get completed respondents
   const respondentsResult = await sql`SELECT * FROM respondents WHERE assessment_id = ${aid} AND status = 'completed'`;
@@ -253,8 +269,25 @@ OUTPUT JSON:
   const reportJson = JSON.stringify(report);
   await sql`INSERT INTO reports (uuid, assessment_id, org_id, report_json, ai_model, ai_tokens_used, respondent_count, overall_score, risk_level) VALUES (${rUuid}, ${aid}, ${orgId}, ${reportJson}, 'claude-sonnet-4-20250514', ${tokens}, ${respondents.length}, ${overallScore}, ${riskLevel})`;
 
-  // Update assessment
-  await sql`UPDATE assessments SET status = 'completed', overall_score = ${overallScore}, risk_level = ${riskLevel}, completed_at = NOW() WHERE id = ${aid}`;
+    // Update assessment
+    await sql`UPDATE assessments SET status = 'completed', overall_score = ${overallScore}, risk_level = ${riskLevel}, completed_at = NOW() WHERE id = ${aid}`;
 
-  return respond({ report: { uuid: rUuid, report_json: report, respondent_count: respondents.length, overall_score: overallScore, risk_level: riskLevel, created_at: new Date().toISOString() } });
+    return respond({ report: { uuid: rUuid, report_json: report, respondent_count: respondents.length, overall_score: overallScore, risk_level: riskLevel, created_at: new Date().toISOString() } });
+  } catch (error) {
+    console.error('POST report error:', error);
+    // Reset generating status on failure
+    try {
+      const { searchParams } = new URL(request.url);
+      const orgId = searchParams.get('org_id');
+      if (orgId) {
+        const assessResult = await sql`SELECT id FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
+        if (assessResult.rows.length > 0) {
+          await sql`UPDATE assessments SET status = 'active' WHERE id = ${assessResult.rows[0].id}`;
+        }
+      }
+    } catch (e) {
+      console.error('Error resetting assessment status:', e);
+    }
+    return respond({ error: 'Server error' }, 500);
+  }
 }
