@@ -238,24 +238,24 @@ export async function POST(request) {
     finals
   });
 
-  // System prompt (same as PHP version)
-  const systemPrompt = `You are a senior nonprofit financial consultant generating a report for the Provident Assessment Platform. You receive pre-computed scores and respondent data. Your job is NARRATIVE SYNTHESIS — the backend already did the math.
+  // System prompt — condensed for token efficiency
+  const systemPrompt = `You are a nonprofit financial consultant generating a JSON report. You receive pre-computed scores and data. Your job is NARRATIVE SYNTHESIS — the backend did the math.
 
-Return ONLY valid JSON. No markdown. No backticks. No preamble.
+Return ONLY valid JSON. No markdown, backticks, or preamble. Be concise — each narrative field should be 2-4 sentences max unless specified.
 
-SCORING IS PRE-COMPUTED. Use scores, priorities, and heatmap as given. DO NOT recalculate.
+RULES: Use pre-computed scores as given. Cite respondent counts. Paraphrase, never quote verbatim. Be specific and actionable.
 
-RULES: Cite respondent counts ("3 of 5 confirmed"). NEVER quote verbatim — paraphrase. Divergence IS the finding. Strengths must be genuine. Concerns: state directly, explain why it matters. Recommendations: specific and actionable, no "consider" or "evaluate." Tone: direct, encouraging, professional.
-
-OUTPUT JSON:
-{"executive_summary":"3-4 paragraphs with \\n between. P1=context. P2=dominant theme. P3=bright spots. P4=path forward. 300-500 words.",
-"team":{"perception_gap":"2 paragraphs comparing health ratings across roles. Flag proximity divergence.","consistency_pct":78},
-"emotional_landscape":{"aggregate_narrative":"1 paragraph on dominant emotions and ratio.","heatmap_narrative":"2 paragraphs on hot columns, hot rows, role divergence.","shift_narrative":"1 paragraph on initial vs final pulse shifts."},
-"sections":[{"number":1,"title":"Leadership & Oversight","score_explanation":"1 paragraph tracing score to specific questions.","strengths":["strength with count"],"concerns":["concern with data and why it matters"],"team_said":"2-3 paragraphs synthesizing open-ended.","recommendations":["specific action"],"vision":"1 paragraph from aspirational responses.","pulse_narrative":"1 sentence."}],
-"priorities":[{"rank":1,"title":"imperative title","timeline":"0-90 days","urgency":"red","description":"2-3 sentences.","owner":"Role","section_ref":8}],
+OUTPUT JSON STRUCTURE:
+{"executive_summary":"2-3 short paragraphs separated by \\n. P1=context+score. P2=key theme+concerns. P3=bright spots+path forward. 150-250 words max.",
+"team":{"perception_gap":"1 paragraph comparing health ratings across roles.","consistency_pct":78},
+"emotional_landscape":{"aggregate_narrative":"2-3 sentences on dominant emotions.","heatmap_narrative":"3-4 sentences on hot spots in the emotion heatmap.","shift_narrative":"2 sentences on sentiment shifts."},
+"sections":[{"number":1,"title":"Section Name","score_explanation":"2 sentences tracing score to data.","strengths":["1 strength with count"],"concerns":["1 concern with why it matters"],"team_said":"1 paragraph synthesizing open-ended responses.","recommendations":["1 specific action"],"pulse_narrative":"1 sentence."}],
+"priorities":[{"rank":1,"title":"title","timeline":"0-90 days","urgency":"red","description":"1-2 sentences.","owner":"Role","section_ref":8}],
 "targets":[{"area":"name","current":1.6,"target":4.0}],
-"key_person_risk":{"narrative":"1 paragraph identifying single point of failure.","functions":[{"function":"Month-end close","owner":"Bookkeeper","documented":false,"backup":"None","risk":"CRITICAL"}]},
-"mission":{"score":4.3,"descriptions":[{"id":"R1","paraphrase":"summary","alignment":"Strong"}],"highlights":"1 paragraph.","narrative":"1 paragraph."}}`;
+"key_person_risk":{"narrative":"2-3 sentences on single points of failure.","functions":[{"function":"name","owner":"Role","documented":false,"backup":"None","risk":"CRITICAL"}]},
+"mission":{"score":4.3,"descriptions":[{"id":"R1","paraphrase":"summary","alignment":"Strong"}],"highlights":"2 sentences.","narrative":"2 sentences."}}
+
+IMPORTANT: Include all 13 sections in the sections array. Keep each section concise. Limit strengths to 2, concerns to 3, recommendations to 2 per section. Top 5 priorities only. 3-5 key person risk functions.`;
 
   // Call Anthropic API
   const apiResponse = await fetch('https://api.anthropic.com/v1/messages', {
@@ -267,7 +267,7 @@ OUTPUT JSON:
     },
     body: JSON.stringify({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: systemPrompt,
       messages: [
         { role: 'user', content: 'Generate report.\n\n' + payload },
@@ -284,6 +284,13 @@ OUTPUT JSON:
   }
 
   const apiData = await apiResponse.json();
+
+  // Check if response was truncated
+  if (apiData.stop_reason === 'max_tokens') {
+    await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid}`;
+    return respond({ error: 'AI response was truncated (too long). Please try again.' }, 500);
+  }
+
   let text = '';
   for (const block of (apiData.content || [])) {
     if (block.text) text += block.text;

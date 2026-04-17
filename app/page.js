@@ -196,7 +196,7 @@ export default function App() {
     setGen(true); setLoading('Generating your report... This takes 15-30 seconds.');
     var r = await P('report?org_id=' + activeOrg, {});
     setLoading(null); setGen(false);
-    if (r.error) { alert('Report generation failed: ' + r.error); return; }
+    if (r.error) { alert('Report generation failed: ' + r.error + (r.parseError ? '\n\nParse error: ' + r.parseError : '') + (r.raw ? '\n\nRaw start: ' + r.raw : '')); return; }
     setReport(r.report.report_json); setPage('report'); setDP('dashboard'); toast('Report generated!');
   }
 
