@@ -25,6 +25,7 @@ var ELABELS = ['Confident', 'Concerned', 'Overwhelmed', 'Hopeful', 'Uncertain', 
 function sc(s) { return s > 3.5 ? 'var(--gr)' : s > 2.5 ? 'var(--bl)' : s > 2.0 ? 'var(--am)' : 'var(--r)'; }
 
 function getInviteToken() { if (typeof window === 'undefined') return null; var p = new URLSearchParams(window.location.search); return p.get('invite') || null; }
+function getResetToken() { if (typeof window === 'undefined') return null; var p = new URLSearchParams(window.location.search); return p.get('reset') || null; }
 
 var TextInput = React.memo(function TextInput(props) {
   var _s = useState(props.value || '');
@@ -69,12 +70,18 @@ export default function App() {
   var [invites, setInvites] = useState([]); var [invEmail, setIE] = useState('');
   var [dashPage, setDP] = useState('dashboard');
   var [pendingInvite, setPI] = useState(null);
+  var [resetToken, setRT] = useState(null);
+  var [resetPass, setRP] = useState('');
+  var [resetPass2, setRP2] = useState('');
+  var [resetMsg, setRM] = useState('');
 
   var saveTimer = useRef(null);
   var [saveStatus, setSaveStatus] = useState('');
 
   useEffect(function() {
     setPI(getInviteToken());
+    var rt = getResetToken();
+    if (rt) { setRT(rt); setMode('reset'); }
   }, []);
 
   useEffect(function() {
@@ -144,6 +151,35 @@ export default function App() {
   }
 
   async function logout() { await P('auth?action=logout', {}); setTk(null); setUser(null); setOrgs([]); setAO(null); setReport(null); setAnswers({}); setPulses({}); }
+
+  async function doForgotPassword() {
+    setAE(''); setRM('');
+    var em = fE.toLowerCase().trim();
+    if (!em) { setAE('Enter your email address'); return; }
+    setLoading('Sending reset link...');
+    var r = await P('auth?action=forgot_password', { email: em });
+    setLoading(null);
+    if (r.error) { setAE(r.error); return; }
+    setRM(r.message || 'Check your email for a reset link.');
+    // In dev/test mode, show the reset URL if returned
+    if (r._dev_reset_url) {
+      setRM('Reset link generated. Open this URL to reset your password:\n' + r._dev_reset_url);
+    }
+  }
+
+  async function doResetPassword() {
+    setAE(''); setRM('');
+    if (!resetPass || resetPass.length < 8) { setAE('Password must be at least 8 characters'); return; }
+    if (resetPass !== resetPass2) { setAE('Passwords do not match'); return; }
+    setLoading('Resetting password...');
+    var r = await P('auth?action=reset_password', { token: resetToken, password: resetPass });
+    setLoading(null);
+    if (r.error) { setAE(r.error); return; }
+    setRM(r.message || 'Password updated!');
+    setRT(null); setRP(''); setRP2('');
+    window.history.replaceState({}, '', window.location.pathname);
+    setTimeout(function() { setMode('login'); setRM(''); }, 2000);
+  }
 
   async function saveOrg() {
     if (!orgForm || !orgForm.name) return;
@@ -257,16 +293,53 @@ export default function App() {
       ),
       React.createElement('div', { style: { display: 'flex', justifyContent: 'center', padding: '36px 20px 60px' } },
         React.createElement('div', { style: { width: '100%', maxWidth: 400 } },
-          React.createElement('div', { style: { display: 'flex', background: 'var(--stone)', borderRadius: 8, padding: 3, marginBottom: 24 } },
-            React.createElement('button', { onClick: function() { setMode('login'); setAE(''); }, style: { flex: 1, padding: '9px 0', borderRadius: 6, background: mode === 'login' ? 'var(--w)' : 'transparent', color: mode === 'login' ? 'var(--n)' : 'var(--mt)', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer' } }, 'Sign In'),
-            React.createElement('button', { onClick: function() { setMode('signup'); setAE(''); }, style: { flex: 1, padding: '9px 0', borderRadius: 6, background: mode === 'signup' ? 'var(--w)' : 'transparent', color: mode === 'signup' ? 'var(--n)' : 'var(--mt)', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer' } }, 'Create Account')
-          ),
-          React.createElement('div', { className: 'card' },
-            mode === 'signup' ? React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Full Name'), React.createElement('input', { className: 'inp', value: fN, onChange: function(e) { setFN(e.target.value); } })) : null,
-            React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Email'), React.createElement('input', { className: 'inp', type: 'email', value: fE, onChange: function(e) { setFE(e.target.value); } })),
-            React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Password'), React.createElement('input', { className: 'inp', type: 'password', value: fP, onChange: function(e) { setFP(e.target.value); }, onKeyDown: function(e) { if (e.key === 'Enter') doAuth(); } })),
-            authErr ? React.createElement('p', { style: { fontSize: 13, color: 'var(--r)', margin: '0 0 10px' } }, authErr) : null,
-            React.createElement('button', { className: 'btn btn-p btn-full', onClick: doAuth }, mode === 'login' ? 'Sign In' : 'Create Account')
+
+          // Reset password form (from ?reset=TOKEN link)
+          mode === 'reset' ? React.createElement('div', null,
+            React.createElement('div', { className: 'card' },
+              React.createElement('h3', { style: { fontSize: 16, marginBottom: 12 } }, 'Set New Password'),
+              React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'New Password'), React.createElement('input', { className: 'inp', type: 'password', value: resetPass, onChange: function(e) { setRP(e.target.value); }, placeholder: 'At least 8 characters' })),
+              React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Confirm Password'), React.createElement('input', { className: 'inp', type: 'password', value: resetPass2, onChange: function(e) { setRP2(e.target.value); }, onKeyDown: function(e) { if (e.key === 'Enter') doResetPassword(); } })),
+              authErr ? React.createElement('p', { style: { fontSize: 13, color: 'var(--r)', margin: '0 0 10px' } }, authErr) : null,
+              resetMsg ? React.createElement('p', { style: { fontSize: 13, color: 'var(--gr)', margin: '0 0 10px' } }, resetMsg) : null,
+              React.createElement('button', { className: 'btn btn-p btn-full', onClick: doResetPassword }, 'Reset Password'),
+              React.createElement('div', { style: { textAlign: 'center', marginTop: 12 } },
+                React.createElement('button', { style: { background: 'none', border: 'none', color: 'var(--mt)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }, onClick: function() { setMode('login'); setAE(''); setRM(''); setRT(null); window.history.replaceState({}, '', window.location.pathname); } }, 'Back to Sign In')
+              )
+            )
+          ) :
+
+          // Forgot password form
+          mode === 'forgot' ? React.createElement('div', null,
+            React.createElement('div', { className: 'card' },
+              React.createElement('h3', { style: { fontSize: 16, marginBottom: 4 } }, 'Forgot Password'),
+              React.createElement('p', { className: 'mt', style: { marginBottom: 16 } }, 'Enter your email and we\'ll generate a reset link.'),
+              React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Email'), React.createElement('input', { className: 'inp', type: 'email', value: fE, onChange: function(e) { setFE(e.target.value); }, onKeyDown: function(e) { if (e.key === 'Enter') doForgotPassword(); } })),
+              authErr ? React.createElement('p', { style: { fontSize: 13, color: 'var(--r)', margin: '0 0 10px' } }, authErr) : null,
+              resetMsg ? React.createElement('p', { style: { fontSize: 13, color: 'var(--gr)', margin: '0 0 10px', whiteSpace: 'pre-wrap', wordBreak: 'break-all' } }, resetMsg) : null,
+              React.createElement('button', { className: 'btn btn-p btn-full', onClick: doForgotPassword }, 'Send Reset Link'),
+              React.createElement('div', { style: { textAlign: 'center', marginTop: 12 } },
+                React.createElement('button', { style: { background: 'none', border: 'none', color: 'var(--mt)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }, onClick: function() { setMode('login'); setAE(''); setRM(''); } }, 'Back to Sign In')
+              )
+            )
+          ) :
+
+          // Login / Signup forms
+          React.createElement('div', null,
+            React.createElement('div', { style: { display: 'flex', background: 'var(--stone)', borderRadius: 8, padding: 3, marginBottom: 24 } },
+              React.createElement('button', { onClick: function() { setMode('login'); setAE(''); }, style: { flex: 1, padding: '9px 0', borderRadius: 6, background: mode === 'login' ? 'var(--w)' : 'transparent', color: mode === 'login' ? 'var(--n)' : 'var(--mt)', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer' } }, 'Sign In'),
+              React.createElement('button', { onClick: function() { setMode('signup'); setAE(''); }, style: { flex: 1, padding: '9px 0', borderRadius: 6, background: mode === 'signup' ? 'var(--w)' : 'transparent', color: mode === 'signup' ? 'var(--n)' : 'var(--mt)', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer' } }, 'Create Account')
+            ),
+            React.createElement('div', { className: 'card' },
+              mode === 'signup' ? React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Full Name'), React.createElement('input', { className: 'inp', value: fN, onChange: function(e) { setFN(e.target.value); } })) : null,
+              React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Email'), React.createElement('input', { className: 'inp', type: 'email', value: fE, onChange: function(e) { setFE(e.target.value); } })),
+              React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Password'), React.createElement('input', { className: 'inp', type: 'password', value: fP, onChange: function(e) { setFP(e.target.value); }, onKeyDown: function(e) { if (e.key === 'Enter') doAuth(); } })),
+              authErr ? React.createElement('p', { style: { fontSize: 13, color: 'var(--r)', margin: '0 0 10px' } }, authErr) : null,
+              React.createElement('button', { className: 'btn btn-p btn-full', onClick: doAuth }, mode === 'login' ? 'Sign In' : 'Create Account'),
+              mode === 'login' ? React.createElement('div', { style: { textAlign: 'center', marginTop: 12 } },
+                React.createElement('button', { style: { background: 'none', border: 'none', color: 'var(--mt)', fontSize: 12, cursor: 'pointer', textDecoration: 'underline' }, onClick: function() { setMode('forgot'); setAE(''); setRM(''); } }, 'Forgot password?')
+              ) : null
+            )
           )
         )
       )

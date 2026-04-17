@@ -121,5 +121,50 @@ export async function POST(request) {
     }
   }
 
+  if (action === 'forgot_password') {
+    try {
+      const email = (input.email || '').toLowerCase().trim();
+      if (!email) return respond({ error: 'Email required' }, 400);
+      const result = await sql`SELECT id, name FROM users WHERE email = ${email} AND deleted_at IS NULL`;
+      // Always return success to prevent email enumeration
+      if (result.rows.length === 0) return respond({ ok: true, message: 'If that email exists, a reset link has been generated.' });
+      const u = result.rows[0];
+      const resetToken = generateToken().slice(0, 32);
+      const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+      // Ensure reset columns exist, then store token
+      try { await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(100)`; } catch (e) {}
+      try { await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ`; } catch (e) {}
+      await sql`UPDATE users SET reset_token = ${resetToken}, reset_token_expires = ${expires} WHERE id = ${u.id}`;
+      // Build reset URL
+      const origin = request.headers.get('origin') || request.headers.get('referer')?.replace(/\/[^/]*$/, '') || '';
+      const resetUrl = origin + '?reset=' + resetToken;
+      console.log('[PASSWORD RESET] Token for ' + email + ': ' + resetToken);
+      console.log('[PASSWORD RESET] URL: ' + resetUrl);
+      return respond({ ok: true, message: 'If that email exists, a reset link has been generated.', _dev_reset_url: resetUrl });
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      return respond({ error: 'Server error' }, 500);
+    }
+  }
+
+  if (action === 'reset_password') {
+    try {
+      const resetToken = (input.token || '').trim();
+      const newPass = input.password || '';
+      if (!resetToken) return respond({ error: 'Reset token required' }, 400);
+      if (!newPass || newPass.length < 8) return respond({ error: 'Password must be at least 8 characters' }, 400);
+      const result = await sql`SELECT id, email FROM users WHERE reset_token = ${resetToken} AND reset_token_expires > NOW() AND deleted_at IS NULL`;
+      if (result.rows.length === 0) return respond({ error: 'Invalid or expired reset link. Please request a new one.' }, 400);
+      const u = result.rows[0];
+      const hash = await bcrypt.hash(newPass, 10);
+      await sql`UPDATE users SET password_hash = ${hash}, reset_token = NULL, reset_token_expires = NULL WHERE id = ${u.id}`;
+      await sql`DELETE FROM sessions WHERE user_id = ${u.id}`;
+      return respond({ ok: true, message: 'Password updated. You can now sign in.' });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      return respond({ error: 'Server error' }, 500);
+    }
+  }
+
   return respond({ error: 'Unknown action' }, 400);
 }
