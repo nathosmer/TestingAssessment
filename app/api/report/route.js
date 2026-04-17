@@ -227,7 +227,7 @@ OUTPUT JSON:
       'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 8192,
       system: systemPrompt,
       messages: [{ role: 'user', content: 'Generate report.\n\n' + payload }]
@@ -267,7 +267,7 @@ OUTPUT JSON:
   const rUuid = generateUUID();
   const tokens = apiData.usage?.output_tokens || null;
   const reportJson = JSON.stringify(report);
-  await sql`INSERT INTO reports (uuid, assessment_id, org_id, report_json, ai_model, ai_tokens_used, respondent_count, overall_score, risk_level) VALUES (${rUuid}, ${aid}, ${orgId}, ${reportJson}, 'claude-sonnet-4-20250514', ${tokens}, ${respondents.length}, ${overallScore}, ${riskLevel})`;
+  await sql`INSERT INTO reports (uuid, assessment_id, org_id, report_json, ai_model, ai_tokens_used, respondent_count, overall_score, risk_level) VALUES (${rUuid}, ${aid}, ${orgId}, ${reportJson}, 'claude-sonnet-4-6', ${tokens}, ${respondents.length}, ${overallScore}, ${riskLevel})`;
 
     // Update assessment
     await sql`UPDATE assessments SET status = 'completed', overall_score = ${overallScore}, risk_level = ${riskLevel}, completed_at = NOW() WHERE id = ${aid}`;
