@@ -78,6 +78,7 @@ export async function POST(request) {
   const priorities = {};
   const criticalFindings = [];
   const sectionData = {};
+  const sectionScoresToInsert = [];
 
   for (let sec = 1; sec <= 13; sec++) {
     const secResp = allResp.filter(r => Number(r.section_number) === sec);
@@ -124,12 +125,21 @@ export async function POST(request) {
     }
     const agreePct = totalQ > 0 ? Math.round(agreed / totalQ * 100) : 0;
 
-    // Store section score
+    // Collect section score for batch insert
     const matchCount = scorable.filter(r => r.answer_matches_benchmark).length;
-    await sql`INSERT INTO section_scores (assessment_id, org_id, section_number, section_name, score, priority, questions_total, questions_matching, respondent_agreement_pct, has_critical_finding, critical_finding_code)
-      VALUES (${aid}, ${orgId}, ${sec}, ${sectionNames[sec]}, ${scoreVal}, ${pri}, ${numQ}, ${matchCount}, ${agreePct}, ${hasCrit}, ${critCode})
-      ON CONFLICT (assessment_id, section_number) DO UPDATE SET
-      score=EXCLUDED.score, priority=EXCLUDED.priority, questions_total=EXCLUDED.questions_total, questions_matching=EXCLUDED.questions_matching, respondent_agreement_pct=EXCLUDED.respondent_agreement_pct, has_critical_finding=EXCLUDED.has_critical_finding, critical_finding_code=EXCLUDED.critical_finding_code`;
+    sectionScoresToInsert.push({
+      assessment_id: aid,
+      org_id: orgId,
+      section_number: sec,
+      section_name: sectionNames[sec],
+      score: scoreVal,
+      priority: pri,
+      questions_total: numQ,
+      questions_matching: matchCount,
+      respondent_agreement_pct: agreePct,
+      has_critical_finding: hasCrit,
+      critical_finding_code: critCode
+    });
 
     // Build section data for AI
     const factual = {};
@@ -149,6 +159,26 @@ export async function POST(request) {
     sectionData[sec] = { factual, open_ended: openEnded, score: scoreVal, priority: pri, agreement: agreePct };
   }
 
+  // Batch insert section scores
+  if (sectionScoresToInsert.length > 0) {
+    const values = sectionScoresToInsert.map((row, idx) => {
+      const offset = idx * 11;
+      return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`;
+    }).join(',');
+
+    const flatParams = sectionScoresToInsert.flatMap(row => [
+      row.assessment_id, row.org_id, row.section_number, row.section_name, row.score, row.priority,
+      row.questions_total, row.questions_matching, row.respondent_agreement_pct, row.has_critical_finding, row.critical_finding_code
+    ]);
+
+    const query = `INSERT INTO section_scores (assessment_id, org_id, section_number, section_name, score, priority, questions_total, questions_matching, respondent_agreement_pct, has_critical_finding, critical_finding_code)
+      VALUES ${values}
+      ON CONFLICT (assessment_id, section_number) DO UPDATE SET
+      score=EXCLUDED.score, priority=EXCLUDED.priority, questions_total=EXCLUDED.questions_total, questions_matching=EXCLUDED.questions_matching, respondent_agreement_pct=EXCLUDED.respondent_agreement_pct, has_critical_finding=EXCLUDED.has_critical_finding, critical_finding_code=EXCLUDED.critical_finding_code`;
+
+    await sql.query(query, flatParams);
+  }
+
   // Heatmap
   const words = ['confident','concerned','overwhelmed','hopeful','uncertain','frustrated','encouraged','afraid','empowered','lost'];
   const heatmap = Array.from({ length: 13 }, () => Array(10).fill(0));
@@ -162,14 +192,21 @@ export async function POST(request) {
     }
   }
 
-  // Sentiment shifts
+  // Sentiment shifts - fetch all initial and final pulses in one query per type
+  const shiftsMap = {};
+  const initialPulsesResult = await sql`SELECT respondent_id, valence_score FROM emotional_pulses WHERE assessment_id = ${aid} AND pulse_point = 'initial'`;
+  const finalPulsesResult = await sql`SELECT respondent_id, valence_score FROM emotional_pulses WHERE assessment_id = ${aid} AND pulse_point = 'final'`;
+
+  const initialByResp = Object.fromEntries(initialPulsesResult.rows.map(r => [r.respondent_id, r.valence_score]));
+  const finalByResp = Object.fromEntries(finalPulsesResult.rows.map(r => [r.respondent_id, r.valence_score]));
+
   const shifts = [];
   for (const resp of respondents) {
-    const iv = await sql`SELECT valence_score FROM emotional_pulses WHERE respondent_id = ${resp.id} AND pulse_point = 'initial'`;
-    const fv = await sql`SELECT valence_score FROM emotional_pulses WHERE respondent_id = ${resp.id} AND pulse_point = 'final'`;
-    if (iv.rows[0]?.valence_score != null && fv.rows[0]?.valence_score != null) {
-      const i = Number(iv.rows[0].valence_score);
-      const f = Number(fv.rows[0].valence_score);
+    const iv = initialByResp[resp.id];
+    const fv = finalByResp[resp.id];
+    if (iv != null && fv != null) {
+      const i = Number(iv);
+      const f = Number(fv);
       shifts.push({ id: resp.uuid, initial: i, final: f, shift: Math.round((f - i) * 100) / 100 });
     }
   }
