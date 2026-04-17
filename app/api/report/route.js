@@ -1,6 +1,8 @@
 import { sql } from '@vercel/postgres';
 import { requireAuth, generateUUID, respond } from '../../../lib/auth';
 
+export const maxDuration = 60;
+
 export async function OPTIONS() {
   return new Response(null, { status: 200 });
 }
