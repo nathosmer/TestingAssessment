@@ -269,7 +269,10 @@ OUTPUT JSON:
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4096,
       system: systemPrompt,
-      messages: [{ role: 'user', content: 'Generate report.\n\n' + payload }]
+      messages: [
+        { role: 'user', content: 'Generate report.\n\n' + payload },
+        { role: 'assistant', content: '{' }
+      ]
     })
   });
 
@@ -285,13 +288,28 @@ OUTPUT JSON:
   for (const block of (apiData.content || [])) {
     if (block.text) text += block.text;
   }
-  text = text.trim().replace(/^```json\s*|```\s*$/gm, '');
+  // Prepend the prefilled '{' since the API continues from the assistant prefill
+  text = '{' + text;
+  // Robust JSON extraction: find the outermost { ... }
+  const firstBrace = text.indexOf('{');
+  const lastBrace = text.lastIndexOf('}');
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid}`;
+    return respond({ error: 'No JSON object found in AI response', raw: text.slice(0, 500) }, 500);
+  }
+  text = text.slice(firstBrace, lastBrace + 1);
   let report;
   try {
     report = JSON.parse(text);
   } catch (e) {
-    await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid}`;
-    return respond({ error: 'Failed to parse AI response', raw: text.slice(0, 500) }, 500);
+    // Try fixing common issues: trailing commas, control chars
+    let cleaned = text.replace(/,\s*([}\]])/g, '$1').replace(/[\x00-\x1f\x7f]/g, c => c === '\n' || c === '\t' ? c : '');
+    try {
+      report = JSON.parse(cleaned);
+    } catch (e2) {
+      await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid}`;
+      return respond({ error: 'Failed to parse AI response', raw: text.slice(0, 500), parseError: e2.message }, 500);
+    }
   }
 
   // Merge pre-computed
