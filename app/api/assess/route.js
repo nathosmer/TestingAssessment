@@ -333,6 +333,17 @@ export async function POST(request) {
     return respond({ ok: true });
   }
 
+  if (action === 'reset_generating') {
+    if (!isOwner) return respond({ error: 'Admin only' }, 403);
+    const assessResult = await sql`SELECT id, status FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
+    if (assessResult.rows.length === 0) return respond({ error: 'No assessment' }, 404);
+    if (assessResult.rows[0].status === 'generating') {
+      await sql`UPDATE assessments SET status = 'active' WHERE id = ${assessResult.rows[0].id}`;
+      return respond({ ok: true, reset: true });
+    }
+    return respond({ ok: true, reset: false, status: assessResult.rows[0].status });
+  }
+
   return respond({ error: 'Bad request' }, 400);
   } catch (error) {
     console.error('POST assess error:', error);
