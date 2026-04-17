@@ -244,17 +244,20 @@ export default function App() {
       loadingEl,
       React.createElement('div', { id: 'toast', className: 'toast' }),
       React.createElement('div', { style: { background: 'var(--n)', padding: '48px 20px 36px', textAlign: 'center' } },
-        React.createElement('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 14 } },
-          React.createElement('div', { style: { width: 32, height: 32, borderRadius: 7, background: 'var(--g)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: 800, color: 'var(--n)', fontFamily: "'Libre Baskerville',serif" } }, 'P'),
-          React.createElement('span', { style: { fontFamily: "'Libre Baskerville',serif", fontWeight: 700, fontSize: 20, color: '#fff' } }, 'Provident')
+        React.createElement('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 12, marginBottom: 14 } },
+          React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 40, height: 40, borderRadius: '50%' } }),
+          React.createElement('div', { style: { textAlign: 'left' } },
+            React.createElement('span', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 22, color: '#fff', display: 'block' } }, 'Provident'),
+            React.createElement('span', { style: { fontFamily: "'Montserrat',sans-serif", fontWeight: 500, fontSize: 10, color: 'var(--g)', letterSpacing: 2, textTransform: 'uppercase' } }, 'Accountability')
+          )
         ),
-        React.createElement('h1', { style: { fontFamily: "'Libre Baskerville',serif", fontSize: 26, color: '#fff', margin: '0 0 6px' } }, 'Financial Stewardship Assessment'),
-        React.createElement('p', { style: { fontSize: 14, color: 'rgba(255,255,255,.5)', maxWidth: 400, margin: '0 auto' } }, "Know where you stand. See where you're going."),
-        pendingInvite ? React.createElement('div', { style: { marginTop: 16, padding: '8px 16px', borderRadius: 8, background: 'rgba(196,154,45,.15)', display: 'inline-block' } }, React.createElement('span', { style: { color: 'var(--g)', fontSize: 13, fontWeight: 600 } }, "You've been invited to take an assessment. " + (mode === 'login' ? 'Sign in or create an account to begin.' : 'Create an account to begin.'))) : null
+        React.createElement('h1', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontSize: 26, color: '#fff', margin: '12px 0 6px' } }, 'Financial Stewardship Assessment'),
+        React.createElement('p', { style: { fontFamily: "'Montserrat',sans-serif", fontSize: 14, color: 'rgba(255,255,255,.5)', maxWidth: 400, margin: '0 auto' } }, "Know where you stand. See where you're going."),
+        pendingInvite ? React.createElement('div', { style: { marginTop: 16, padding: '8px 16px', borderRadius: 8, background: 'rgba(206,157,49,.15)', display: 'inline-block' } }, React.createElement('span', { style: { color: 'var(--g)', fontSize: 13, fontWeight: 600 } }, "You've been invited to take an assessment. " + (mode === 'login' ? 'Sign in or create an account to begin.' : 'Create an account to begin.'))) : null
       ),
       React.createElement('div', { style: { display: 'flex', justifyContent: 'center', padding: '36px 20px 60px' } },
         React.createElement('div', { style: { width: '100%', maxWidth: 400 } },
-          React.createElement('div', { style: { display: 'flex', background: '#EDF0F4', borderRadius: 8, padding: 3, marginBottom: 24 } },
+          React.createElement('div', { style: { display: 'flex', background: 'var(--stone)', borderRadius: 8, padding: 3, marginBottom: 24 } },
             React.createElement('button', { onClick: function() { setMode('login'); setAE(''); }, style: { flex: 1, padding: '9px 0', borderRadius: 6, background: mode === 'login' ? 'var(--w)' : 'transparent', color: mode === 'login' ? 'var(--n)' : 'var(--mt)', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer' } }, 'Sign In'),
             React.createElement('button', { onClick: function() { setMode('signup'); setAE(''); }, style: { flex: 1, padding: '9px 0', borderRadius: 6, background: mode === 'signup' ? 'var(--w)' : 'transparent', color: mode === 'signup' ? 'var(--n)' : 'var(--mt)', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer' } }, 'Create Account')
           ),
@@ -303,7 +306,7 @@ export default function App() {
       loadingEl,
       React.createElement('div', { id: 'toast', className: 'toast' }),
       React.createElement('div', { className: 'nav-top' },
-        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } }, React.createElement('div', { style: { width: 24, height: 24, borderRadius: 5, background: 'var(--g)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: 'var(--n)' } }, 'P'), React.createElement('span', { style: { fontFamily: "'Libre Baskerville',serif", fontWeight: 700, fontSize: 15, color: '#fff' } }, 'Provident')),
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } }, React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 28, height: 28, borderRadius: '50%' } }), React.createElement('span', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 15, color: '#fff' } }, 'Provident')),
         React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12, padding: '5px 12px' }, onClick: function() { setOF(null); setPage('home'); } }, 'Cancel')
       ),
       React.createElement('div', { className: 'main-c' },
@@ -459,9 +462,9 @@ export default function App() {
 
     var radarPts = SCORES.map(function(s, i) { var a = Math.PI / 2 - 2 * Math.PI * i / 13, r = 130 * s / 5; return [190 + r * Math.cos(a), 190 - r * Math.sin(a)]; });
     var poly = radarPts.map(function(p) { return p.join(','); }).join(' ');
-    var grid = [1, 2, 3, 4, 5].map(function(v) { var pts = Array.from({ length: 13 }, function(_, i) { var a = Math.PI / 2 - 2 * Math.PI * i / 13, r = 130 * v / 5; return (190 + r * Math.cos(a)) + ',' + (190 - r * Math.sin(a)); }).join(' '); return React.createElement('polygon', { key: v, points: pts, fill: 'none', stroke: '#E8ECF1', strokeWidth: '0.5' }); });
+    var grid = [1, 2, 3, 4, 5].map(function(v) { var pts = Array.from({ length: 13 }, function(_, i) { var a = Math.PI / 2 - 2 * Math.PI * i / 13, r = 130 * v / 5; return (190 + r * Math.cos(a)) + ',' + (190 - r * Math.sin(a)); }).join(' '); return React.createElement('polygon', { key: v, points: pts, fill: 'none', stroke: '#d9d2c6', strokeWidth: '0.5' }); });
     var dots = radarPts.map(function(p, i) { return React.createElement('circle', { key: i, cx: p[0], cy: p[1], r: 4, fill: sc(SCORES[i]), stroke: 'white', strokeWidth: 2 }); });
-    var labels = SECS.map(function(s, i) { var a = Math.PI / 2 - 2 * Math.PI * i / 13, x = 190 + 158 * Math.cos(a), y = 190 - 158 * Math.sin(a), anc = Math.cos(a) < -.3 ? 'end' : Math.cos(a) > .3 ? 'start' : 'middle'; return React.createElement('text', { key: i, x: x, y: y, textAnchor: anc, fontSize: '8', fill: 'var(--bd)', fontFamily: 'Outfit' }, s.split(' & ')[0].split(',')[0]); });
+    var labels = SECS.map(function(s, i) { var a = Math.PI / 2 - 2 * Math.PI * i / 13, x = 190 + 158 * Math.cos(a), y = 190 - 158 * Math.sin(a), anc = Math.cos(a) < -.3 ? 'end' : Math.cos(a) > .3 ? 'start' : 'middle'; return React.createElement('text', { key: i, x: x, y: y, textAnchor: anc, fontSize: '8', fill: 'var(--bd)', fontFamily: 'Montserrat' }, s.split(' & ')[0].split(',')[0]); });
 
     var sideSecs = [{ id: 'dashboard', label: 'Dashboard' }, { id: 'summary', label: 'Executive Summary' }, { id: 'team_rpt', label: 'Your Team' }, { id: 'emotions', label: 'Emotional Landscape' }];
     for (var i = 0; i < 13; i++) sideSecs.push({ id: 'sec_' + (i + 1), label: (i + 1) + '. ' + SECS[i].split(' & ')[0].split(',')[0], score: SCORES[i], pri: PRIS[i] });
@@ -484,7 +487,7 @@ export default function App() {
         ),
         React.createElement('div', { className: 'card', style: { marginBottom: 20 } }, React.createElement('h3', { style: { fontSize: 14, fontWeight: 700, marginBottom: 12 } }, 'Organizational Health'),
           React.createElement('div', { style: { display: 'flex', justifyContent: 'center' } },
-            React.createElement('svg', { viewBox: '0 0 380 380', width: 400 }, grid, React.createElement('polygon', { points: poly, fill: 'rgba(196,154,45,.15)', stroke: 'var(--g)', strokeWidth: 2 }), dots, React.createElement('circle', { cx: 190, cy: 190, r: 22, fill: 'var(--n)' }), React.createElement('text', { x: 190, y: 194, textAnchor: 'middle', fill: 'var(--g)', fontFamily: "'Libre Baskerville',serif", fontWeight: 700, fontSize: 16 }, R.overall_score), labels)
+            React.createElement('svg', { viewBox: '0 0 380 380', width: 400 }, grid, React.createElement('polygon', { points: poly, fill: 'rgba(206,157,49,.15)', stroke: 'var(--g)', strokeWidth: 2 }), dots, React.createElement('circle', { cx: 190, cy: 190, r: 22, fill: 'var(--n)' }), React.createElement('text', { x: 190, y: 194, textAnchor: 'middle', fill: 'var(--g)', fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 16 }, R.overall_score), labels)
           )
         ),
         React.createElement('div', { className: 'card' }, SECS.map(function(s, i) { return React.createElement('div', { key: i, className: 'bar-r' }, React.createElement('div', { className: 'bar-l', style: { cursor: 'pointer' }, onClick: function() { setDP('sec_' + (i + 1)); } }, s.split(' & ')[0].split(',')[0]), React.createElement('div', { className: 'bar-t' }, React.createElement('div', { className: 'bar-f', style: { width: (SCORES[i] / 5 * 100) + '%', background: sc(SCORES[i]) } })), React.createElement('div', { className: 'bar-sc', style: { color: sc(SCORES[i]) } }, SCORES[i] != null ? SCORES[i].toFixed(1) : '—'), React.createElement('span', { className: 'pri ' + (PRIS[i] === 'HIGH' ? 'pri-h' : PRIS[i] === 'MEDIUM' ? 'pri-m' : 'pri-l') }, PRIS[i])); }))
@@ -519,7 +522,7 @@ export default function App() {
 
     if (dashPage === 'priorities' && R.priorities) content = React.createElement('div', null, React.createElement('h1', { className: 'pg-t' }, 'Top 5 Priorities'),
       R.priorities.map(function(p, i) { return React.createElement('div', { key: i, style: { display: 'flex', gap: 16, background: 'var(--w)', borderRadius: 10, padding: '18px 20px', marginBottom: 12, border: '1px solid var(--br)' } },
-        React.createElement('div', { style: { width: 40, height: 40, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Libre Baskerville',serif", fontSize: 20, fontWeight: 700, color: '#fff', background: p.urgency === 'red' ? 'var(--r)' : p.urgency === 'amber' ? 'var(--am)' : 'var(--bl)', flexShrink: 0 } }, p.rank),
+        React.createElement('div', { style: { width: 40, height: 40, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontSize: 20, fontWeight: 700, color: '#fff', background: p.urgency === 'red' ? 'var(--r)' : p.urgency === 'amber' ? 'var(--am)' : 'var(--bl)', flexShrink: 0 } }, p.rank),
         React.createElement('div', { style: { flex: 1 } }, React.createElement('div', { style: { fontWeight: 700, fontSize: 14, color: 'var(--n)' } }, p.title), React.createElement('div', { className: 'mt', style: { margin: '2px 0 6px' } }, p.timeline), React.createElement('p', { style: { fontSize: 13, lineHeight: 1.6 } }, p.description), React.createElement('div', { className: 'mt', style: { marginTop: 6 } }, 'Owner: ', p.owner))
       ); }));
 
@@ -535,7 +538,7 @@ export default function App() {
 
     if (dashPage === 'mission' && R.mission) content = React.createElement('div', null, React.createElement('h1', { className: 'pg-t' }, 'Mission & Alignment'),
       React.createElement('div', { className: 'card' },
-        React.createElement('div', { style: { fontSize: 22, fontWeight: 700, color: 'var(--g)', marginBottom: 8, fontFamily: "'Libre Baskerville',serif" } }, R.mission.score, '/5.0'),
+        React.createElement('div', { style: { fontSize: 22, fontWeight: 700, color: 'var(--g)', marginBottom: 8, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, R.mission.score, '/5.0'),
         React.createElement('p', { style: { fontSize: 13, lineHeight: 1.7, marginBottom: 12 } }, R.mission.narrative),
         React.createElement('p', { style: { fontSize: 13, lineHeight: 1.7 } }, R.mission.highlights)
       ));
@@ -544,15 +547,15 @@ export default function App() {
       loadingEl,
       React.createElement('div', { id: 'toast', className: 'toast' }),
       React.createElement('nav', { className: 'sb' },
-        React.createElement('div', { className: 'sb-hd' }, React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } }, React.createElement('div', { style: { width: 24, height: 24, borderRadius: 5, background: 'var(--g)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: 'var(--n)' } }, 'P'), React.createElement('span', { style: { color: '#fff', fontSize: 11, fontWeight: 500, letterSpacing: .5 } }, 'PROVIDENT')), React.createElement('div', { className: 'sb-org' }, co ? co.name : ''), React.createElement('div', { className: 'mt' }, R.respondent_count, ' Respondents')),
+        React.createElement('div', { className: 'sb-hd' }, React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } }, React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 24, height: 24, borderRadius: '50%' } }), React.createElement('div', null, React.createElement('span', { style: { color: '#fff', fontSize: 11, fontWeight: 600, letterSpacing: .5, display: 'block' } }, 'PROVIDENT'), React.createElement('span', { style: { color: 'var(--g)', fontSize: 8, fontWeight: 500, letterSpacing: 1.5, textTransform: 'uppercase' } }, 'Accountability'))), React.createElement('div', { className: 'sb-org' }, co ? co.name : ''), React.createElement('div', { className: 'mt' }, R.respondent_count, ' Respondents')),
         React.createElement('div', { className: 'sb-nav' }, sideSecs.map(function(it) { return React.createElement('div', { key: it.id, className: 'sb-it' + (dashPage === it.id ? ' act' : ''), onClick: function() { setDP(it.id); } }, it.score !== undefined ? React.createElement('span', { className: 'sb-dot', style: { background: sc(it.score) } }) : null, it.label, it.pri === 'HIGH' ? React.createElement('span', { style: { marginLeft: 'auto', fontSize: 10 } }, '⚠') : null); })),
-        React.createElement('div', { className: 'sb-ft' }, React.createElement('a', { href: '#', onClick: function(e) { e.preventDefault(); setPage('home'); } }, '← Back to Home'))
+        React.createElement('div', { className: 'sb-ft' }, React.createElement('button', { style: { background: 'none', border: 'none', color: 'var(--mt)', fontSize: 11, padding: '4px 0', cursor: 'pointer', fontFamily: "'Montserrat',sans-serif" }, onMouseEnter: function(e) { e.target.style.color = 'var(--g)'; }, onMouseLeave: function(e) { e.target.style.color = 'var(--mt)'; }, onClick: function() { setPage('home'); } }, '← Back to Home'))
       ),
       React.createElement('div', { className: 'main-r' }, content || React.createElement('div', { className: 'card' }, 'Select a page from the sidebar.'))
     );
   }
 
-  // MAIN LAYOUT
+  // MAIN LAYOUT — Report gets its own layout with sidebar
   if (page === 'report') return React.createElement(ReportDash);
 
   var navItems = [{ id: 'home', label: 'Home' }, { id: 'assess', label: 'Assessment' }, { id: 'team', label: 'Team' }];
@@ -563,11 +566,11 @@ export default function App() {
     React.createElement('div', { id: 'toast', className: 'toast' }),
     React.createElement('div', { className: 'nav-top' },
       React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }, onClick: function() { setPage('home'); } },
-        React.createElement('div', { style: { width: 24, height: 24, borderRadius: 5, background: 'var(--g)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: 'var(--n)', fontFamily: "'Libre Baskerville',serif" } }, 'P'),
-        React.createElement('span', { style: { fontFamily: "'Libre Baskerville',serif", fontWeight: 700, fontSize: 15, color: '#fff' } }, 'Provident')
+        React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 28, height: 28, borderRadius: '50%' } }),
+        React.createElement('span', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 15, color: '#fff' } }, 'Provident')
       ),
       React.createElement('div', { style: { display: 'flex', gap: 4, alignItems: 'center' } },
-        navItems.map(function(n) { return React.createElement('button', { key: n.id, onClick: function() { setPage(n.id); if (n.id === 'report') setDP('dashboard'); }, style: { padding: '5px 10px', borderRadius: 5, background: page === n.id ? 'rgba(196,154,45,.18)' : 'transparent', color: page === n.id ? 'var(--g)' : 'rgba(255,255,255,.55)', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 } }, n.label); }),
+        navItems.map(function(n) { return React.createElement('button', { key: n.id, onClick: function() { setPage(n.id); if (n.id === 'report') setDP('dashboard'); }, style: { padding: '5px 10px', borderRadius: 5, background: page === n.id ? 'rgba(206,157,49,.18)' : 'transparent', color: page === n.id ? 'var(--g)' : 'rgba(255,255,255,.55)', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 } }, n.label); }),
         React.createElement('div', { style: { width: 1, height: 18, background: 'rgba(255,255,255,.1)', margin: '0 6px' } }),
         React.createElement('span', { style: { fontSize: 12, color: 'rgba(255,255,255,.5)' } }, user.name.split(' ')[0]),
         React.createElement('button', { className: 'btn', style: { fontSize: 11, padding: '4px 10px', background: 'rgba(255,255,255,.08)', color: 'rgba(255,255,255,.6)' }, onClick: logout }, 'Out')
@@ -582,13 +585,13 @@ export default function App() {
           React.createElement('button', { className: 'btn btn-g', onClick: function() { setOF({ name: '' }); setPage('org_edit'); } }, 'Add Organization')
         )
         : co ? React.createElement('div', null,
-          React.createElement('div', { className: 'card', style: { padding: 16, marginBottom: 16 } }, React.createElement('div', { style: { fontSize: 11, color: 'var(--mt)', fontWeight: 600 } }, 'ACTIVE ORGANIZATION'), React.createElement('div', { style: { fontSize: 18, fontWeight: 700, fontFamily: "'Libre Baskerville',serif" } }, co.name),
+          React.createElement('div', { className: 'card', style: { padding: 16, marginBottom: 16 } }, React.createElement('div', { style: { fontSize: 11, color: 'var(--mt)', fontWeight: 600 } }, 'ACTIVE ORGANIZATION'), React.createElement('div', { style: { fontSize: 18, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, co.name),
             orgs.length > 1 ? React.createElement('select', { className: 'inp', style: { marginTop: 8, maxWidth: 300 }, value: activeOrg || '', onChange: async function(e) { setAO(e.target.value); await loadOrg(e.target.value); } }, orgs.map(function(o) { return React.createElement('option', { key: o.id, value: o.id }, o.name); })) : null
           ),
           React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginBottom: 20 } },
-            React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid ' + (progressPct > 50 ? 'var(--gr)' : 'var(--am)') } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Progress'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Libre Baskerville',serif" } }, progressPct, '%')),
-            React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid var(--bl)' } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Team'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Libre Baskerville',serif" } }, invites.length, ' invited')),
-            React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid ' + (report ? 'var(--gr)' : 'var(--mt)') } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Report'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Libre Baskerville',serif" } }, report ? 'Ready' : 'Pending'))
+            React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid ' + (progressPct > 50 ? 'var(--gr)' : 'var(--am)') } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Progress'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, progressPct, '%')),
+            React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid var(--bl)' } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Team'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, invites.length, ' invited')),
+            React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid ' + (report ? 'var(--gr)' : 'var(--mt)') } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Report'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, report ? 'Ready' : 'Pending'))
           ),
           React.createElement('div', { className: 'card' }, React.createElement('h3', { style: { fontSize: 16, marginBottom: 12 } }, 'Quick Actions'),
             React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
@@ -625,8 +628,11 @@ export default function App() {
       ) : null
     ),
     React.createElement('div', { style: { background: 'var(--n)', padding: '24px 20px', textAlign: 'center', marginTop: 40 } },
-      React.createElement('div', { style: { fontFamily: "'Libre Baskerville',serif", fontWeight: 700, fontSize: 14, color: '#fff' } }, 'Provident Assessment Platform'),
-      React.createElement('div', { style: { fontSize: 11, color: 'rgba(255,255,255,.3)', marginTop: 4 } }, 'providentstrat.com')
+      React.createElement('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
+        React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 20, height: 20, borderRadius: '50%' } }),
+        React.createElement('span', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 14, color: '#fff' } }, 'Provident Accountability')
+      ),
+      React.createElement('div', { style: { fontSize: 11, color: 'rgba(255,255,255,.3)', marginTop: 4, fontFamily: "'Montserrat',sans-serif" } }, 'providentstrat.com')
     )
   );
 }
