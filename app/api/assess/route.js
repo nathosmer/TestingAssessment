@@ -122,9 +122,11 @@ export async function POST(request) {
     // Auto-create org_member as respondent if the accepting user is logged in
     const acceptingUser = await requireAuth(request);
     if (acceptingUser) {
-      await sql`INSERT INTO org_members (user_id, org_id, role, invited_by)
-        VALUES (${acceptingUser.id}, ${invite.org_id}, 'respondent', ${invite.invited_by})
-        ON CONFLICT (user_id, org_id) DO NOTHING`;
+      try {
+        await sql`INSERT INTO org_members (user_id, org_id, role, invited_by)
+          VALUES (${acceptingUser.id}, ${invite.org_id}, 'respondent', ${invite.invited_by})
+          ON CONFLICT (user_id, org_id) DO NOTHING`;
+      } catch (e) { /* org_members table may not exist yet */ }
     }
     return respond({ ok: true, org_id: Number(invite.org_id), assessment_id: Number(invite.assessment_id), email: invite.email });
   }
