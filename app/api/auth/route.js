@@ -1,6 +1,7 @@
 import { sql } from '@vercel/postgres';
 import bcrypt from 'bcryptjs';
 import { generateUUID, generateToken, respond, setAuthCookie, clearAuthCookie } from '../../../lib/auth';
+import { sendResetEmail } from '../../../lib/email';
 
 const SESSION_LIFETIME_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
@@ -131,17 +132,16 @@ export async function POST(request) {
       const u = result.rows[0];
       const resetToken = generateToken().slice(0, 32);
       const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
-      // Ensure reset columns exist, then store token
-      try { await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(100)`; } catch (e) {}
-      try { await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ`; } catch (e) {}
       await sql`UPDATE users SET reset_token = ${resetToken}, reset_token_expires = ${expires} WHERE id = ${u.id}`;
       // Build reset URL
-      const origin = request.headers.get('origin') || request.headers.get('referer')?.replace(/\/[^/]*$/, '') || '';
+      const origin = request.headers.get('origin') || request.headers.get('referer')?.replace(/\/[^/]*$/, '') || process.env.APP_URL || '';
       const resetUrl = origin + '?reset=' + resetToken;
+      // Send reset email (falls back gracefully if email not configured)
+      await sendResetEmail(email, resetUrl, u.name);
       if (process.env.NODE_ENV !== 'production') {
         console.log('[PASSWORD RESET] URL: ' + resetUrl);
       }
-      const respBody = { ok: true, message: 'If that email exists, a reset link has been generated.' };
+      const respBody = { ok: true, message: 'If that email exists, a reset link has been sent.' };
       if (process.env.NODE_ENV !== 'production') respBody._dev_reset_url = resetUrl;
       return respond(respBody);
     } catch (error) {
