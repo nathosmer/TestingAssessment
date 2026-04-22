@@ -24,18 +24,18 @@ export async function GET(request) {
       }
       if (!token) return respond({ authenticated: false });
       const result = await sql`
-        SELECT u.id, u.uuid, u.name, u.email
+        SELECT u.id, u.uuid, u.name, u.email, u.site_role
         FROM sessions s JOIN users u ON s.user_id = u.id
         WHERE s.token = ${token} AND s.expires_at > NOW()
       `;
       const u = result.rows[0];
       if (!u) return respond({ authenticated: false });
+      if (!u.site_role) u.site_role = 'user';
 
       // Clean up expired sessions (L-04)
       try {
         await sql`DELETE FROM sessions WHERE expires_at < NOW()`;
       } catch (e) {
-        // Don't fail if cleanup fails
         console.error('Session cleanup error:', e);
       }
 
@@ -70,7 +70,7 @@ export async function POST(request) {
       const token = generateToken();
       const exp = new Date(Date.now() + SESSION_LIFETIME_SECONDS * 1000).toISOString();
       await sql`INSERT INTO sessions (user_id, token, expires_at) VALUES (${userId}, ${token}, ${exp})`;
-      let resp = respond({ user: { id: Number(userId), uuid, name, email }, token }, 201);
+      let resp = respond({ user: { id: Number(userId), uuid, name, email, site_role: 'user' }, token }, 201);
       resp = setAuthCookie(resp, token);
       return resp;
     } catch (error) {
@@ -84,7 +84,7 @@ export async function POST(request) {
       const email = (input.email || '').toLowerCase().trim();
       const pass = input.password || '';
       if (!email || !pass) return respond({ error: 'Email and password required' }, 400);
-      const result = await sql`SELECT id, uuid, name, email, password_hash FROM users WHERE email = ${email} AND deleted_at IS NULL`;
+      const result = await sql`SELECT id, uuid, name, email, password_hash, site_role FROM users WHERE email = ${email} AND deleted_at IS NULL`;
       const u = result.rows[0];
       if (!u || !(await bcrypt.compare(pass, u.password_hash))) return respond({ error: 'Invalid credentials' }, 401);
       await sql`DELETE FROM sessions WHERE user_id = ${u.id} AND expires_at < NOW()`;
@@ -92,7 +92,7 @@ export async function POST(request) {
       const exp = new Date(Date.now() + SESSION_LIFETIME_SECONDS * 1000).toISOString();
       await sql`INSERT INTO sessions (user_id, token, expires_at) VALUES (${u.id}, ${token}, ${exp})`;
       await sql`UPDATE users SET last_login_at = NOW() WHERE id = ${u.id}`;
-      let resp = respond({ user: { id: Number(u.id), uuid: u.uuid, name: u.name, email: u.email }, token });
+      let resp = respond({ user: { id: Number(u.id), uuid: u.uuid, name: u.name, email: u.email, site_role: u.site_role || 'user' }, token });
       resp = setAuthCookie(resp, token);
       return resp;
     } catch (error) {
@@ -138,9 +138,12 @@ export async function POST(request) {
       // Build reset URL
       const origin = request.headers.get('origin') || request.headers.get('referer')?.replace(/\/[^/]*$/, '') || '';
       const resetUrl = origin + '?reset=' + resetToken;
-      console.log('[PASSWORD RESET] Token for ' + email + ': ' + resetToken);
-      console.log('[PASSWORD RESET] URL: ' + resetUrl);
-      return respond({ ok: true, message: 'If that email exists, a reset link has been generated.', _dev_reset_url: resetUrl });
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[PASSWORD RESET] URL: ' + resetUrl);
+      }
+      const respBody = { ok: true, message: 'If that email exists, a reset link has been generated.' };
+      if (process.env.NODE_ENV !== 'production') respBody._dev_reset_url = resetUrl;
+      return respond(respBody);
     } catch (error) {
       console.error('Forgot password error:', error);
       return respond({ error: 'Server error' }, 500);

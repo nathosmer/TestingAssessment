@@ -31,27 +31,46 @@ var TextInput = React.memo(function TextInput(props) {
   var _s = useState(props.value || '');
   var local = _s[0]; var setLocal = _s[1];
   var timerRef = useRef(null);
+  var inputRef = useRef(null);
   var onChangeRef = useRef(props.onChange);
+  var lastSentRef = useRef(props.value || '');
   onChangeRef.current = props.onChange;
 
-  useEffect(function() { setLocal(props.value || ''); }, [props.value]);
+  // Only sync from parent when the input is NOT focused AND the value
+  // actually differs from what we last sent upstream — prevents the
+  // parent echo from resetting cursor position or stealing focus.
+  useEffect(function() {
+    var incoming = props.value || '';
+    var el = inputRef.current;
+    var hasFocus = el && el === document.activeElement;
+    if (!hasFocus && incoming !== local) {
+      setLocal(incoming);
+      lastSentRef.current = incoming;
+    }
+  }, [props.value]);
 
   function handleChange(e) {
     var v = e.target.value;
     setLocal(v);
     if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(function() { onChangeRef.current(v); }, 800);
+    timerRef.current = setTimeout(function() {
+      lastSentRef.current = v;
+      onChangeRef.current(v);
+    }, 800);
   }
 
   function handleBlur() {
     if (timerRef.current) clearTimeout(timerRef.current);
-    onChangeRef.current(local);
+    if (local !== lastSentRef.current) {
+      lastSentRef.current = local;
+      onChangeRef.current(local);
+    }
   }
 
   if (props.rows) {
-    return React.createElement('textarea', { className: 'inp', rows: props.rows, value: local, onChange: handleChange, onBlur: handleBlur, placeholder: props.placeholder || '' });
+    return React.createElement('textarea', { ref: inputRef, className: 'inp', rows: props.rows, value: local, onChange: handleChange, onBlur: handleBlur, placeholder: props.placeholder || '' });
   }
-  return React.createElement('input', { className: 'inp', type: props.type || 'text', style: props.style, value: local, onChange: handleChange, onBlur: handleBlur, placeholder: props.placeholder || '' });
+  return React.createElement('input', { ref: inputRef, className: 'inp', type: props.type || 'text', style: props.style, value: local, onChange: handleChange, onBlur: handleBlur, placeholder: props.placeholder || '' });
 });
 
 export default function App() {
@@ -74,9 +93,19 @@ export default function App() {
   var [resetPass, setRP] = useState('');
   var [resetPass2, setRP2] = useState('');
   var [resetMsg, setRM] = useState('');
+  var [pf, setPf] = useState({ respondent_name: '', role: '', years_involved: '', paid_volunteer: '', finance_involvement: '', mission_description: '', recent_highlight: '', mission_alignment: '', financial_health_rating: '', concerns_text: '' });
+  var [ipWords, setIPW] = useState([]); var [ipWhy, setIPWhy] = useState('');
+  var [orgMembers, setOrgMembers] = useState([]);
+  var [adminData, setAdminData] = useState({ orgs: [], users: [], stats: null });
 
   var saveTimer = useRef(null);
   var [saveStatus, setSaveStatus] = useState('');
+
+  // Auto-load members when team page is shown
+  useEffect(function() {
+    if (page === 'team' && activeOrg && user) { loadMembers(); }
+    if (page === 'admin' && user && user.site_role === 'super_admin') { loadAdminData(); }
+  }, [page, activeOrg]);
 
   useEffect(function() {
     setPI(getInviteToken());
@@ -112,20 +141,25 @@ export default function App() {
   }, [pendingInvite]);
 
   async function loadOrg(oid) {
-    var q = await G('assess?action=questions&org_id=' + oid); setQs(q.questions || []);
-    var a = await G('assess?org_id=' + oid);
-    var parsedAnswers = a.answers || {};
-    var qMap = {}; (q.questions || []).forEach(function(qi) { qMap[qi.code] = qi; });
-    Object.keys(parsedAnswers).forEach(function(code) {
-      if (qMap[code] && qMap[code].question_type === 'select_multi' && typeof parsedAnswers[code] === 'string') {
-        try { parsedAnswers[code] = JSON.parse(parsedAnswers[code]); } catch (e) { parsedAnswers[code] = parsedAnswers[code].split(',').map(function(s) { return s.trim(); }); }
-      }
-    });
-    setAnswers(parsedAnswers);
-    setPulses(a.pulses || {}); setResp(a.respondent || null);
-    if (a.respondent && a.respondent.status !== 'invited') setPD(true);
-    var rp = await G('report?org_id=' + oid); setReport(rp.report ? rp.report.report_json : null);
-    var inv = await G('assess?action=invites&org_id=' + oid); setInvites(inv.invites || []);
+    try {
+      var q = await G('assess?action=questions&org_id=' + oid); setQs(q.questions || []);
+      var a = await G('assess?org_id=' + oid);
+      var parsedAnswers = a.answers || {};
+      var qMap = {}; (q.questions || []).forEach(function(qi) { qMap[qi.code] = qi; });
+      Object.keys(parsedAnswers).forEach(function(code) {
+        if (qMap[code] && qMap[code].question_type === 'select_multi' && typeof parsedAnswers[code] === 'string') {
+          try { parsedAnswers[code] = JSON.parse(parsedAnswers[code]); } catch (e) { parsedAnswers[code] = parsedAnswers[code].split(',').map(function(s) { return s.trim(); }); }
+        }
+      });
+      setAnswers(parsedAnswers);
+      setPulses(a.pulses || {}); setResp(a.respondent || null);
+      if (a.respondent && a.respondent.status !== 'invited') setPD(true);
+      var rp = await G('report?org_id=' + oid); setReport(rp.report ? rp.report.report_json : null);
+      var inv = await G('assess?action=invites&org_id=' + oid); setInvites(inv.invites || []);
+    } catch (err) {
+      console.error('loadOrg error:', err);
+      setAE('Failed to load organization data. Please try again.');
+    }
   }
 
   async function doAuth() {
@@ -192,12 +226,21 @@ export default function App() {
     setOF(null); setPage('home'); toast('Organization saved');
   }
 
+  function flushSaveTimer() {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+      if (activeOrg && curSec >= 1 && curSec <= 13) saveAnswerBatch(curSec);
+    }
+  }
+
   function setA(code, val) {
     setAnswers(function(prev) { var n = Object.assign({}, prev); n[code] = val; return n; });
     setSaveStatus('unsaved');
     if (saveTimer.current) clearTimeout(saveTimer.current);
+    var secAtSave = curSec;
     saveTimer.current = setTimeout(function() {
-      if (activeOrg && curSec >= 1 && curSec <= 13) saveAnswerBatch(curSec);
+      if (activeOrg && secAtSave >= 1 && secAtSave <= 13) saveAnswerBatch(secAtSave);
     }, 3000);
   }
 
@@ -255,6 +298,59 @@ export default function App() {
     toast('Invite revoked');
     var inv = await G('assess?action=invites&org_id=' + activeOrg); setInvites(inv.invites || []);
   }
+
+  // Role management functions
+  async function loadMembers() {
+    if (!activeOrg) return;
+    var r = await G('assess?action=members&org_id=' + activeOrg);
+    setOrgMembers(r.members || []);
+  }
+
+  async function setMemberRole(userId, newRole) {
+    if (!activeOrg) return;
+    var r = await P('assess?action=set_member_role&org_id=' + activeOrg, { user_id: userId, role: newRole });
+    if (r.error) { alert(r.error); return; }
+    toast('Role updated');
+    await loadMembers();
+  }
+
+  async function removeMember(userId, name) {
+    if (!confirm('Remove ' + name + ' from this organization?')) return;
+    var r = await P('assess?action=remove_member&org_id=' + activeOrg, { user_id: userId });
+    if (r.error) { alert(r.error); return; }
+    toast('Member removed');
+    await loadMembers();
+  }
+
+  // Super admin functions
+  async function loadAdminData() {
+    setLoading('Loading admin data...');
+    var s = await G('admin?action=stats');
+    var o = await G('admin?action=orgs');
+    var u = await G('admin?action=users');
+    setAdminData({ stats: s.stats || null, orgs: o.orgs || [], users: u.users || [] });
+    setLoading(null);
+  }
+
+  async function adminDeactivateUser(userId) {
+    if (!confirm('Deactivate this user? They will be logged out and unable to sign in.')) return;
+    await P('admin?action=deactivate_user', { user_id: userId });
+    toast('User deactivated');
+    await loadAdminData();
+  }
+
+  async function adminReactivateUser(userId) {
+    await P('admin?action=reactivate_user', { user_id: userId });
+    toast('User reactivated');
+    await loadAdminData();
+  }
+
+  function isSuperAdmin() { return user && user.site_role === 'super_admin'; }
+  function getMyOrgRole() {
+    var co = orgs.find(function(o) { return String(o.id) === String(activeOrg); });
+    return co ? (co.my_role || 'respondent') : null;
+  }
+  function isOrgAdmin() { var r = getMyOrgRole(); return r === 'admin' || r === 'super_admin'; }
 
   function secQs(sec) { return questions.filter(function(q) { return Number(q.section_number) === sec && q.part === 'S' && !q.version_retired; }); }
   function setPulseW(point, word) {
@@ -402,8 +498,7 @@ export default function App() {
   function AssessPage() {
     if (!co) return React.createElement('div', { className: 'card', style: { textAlign: 'center', padding: 40 } }, React.createElement('p', { className: 'mt' }, 'Create an organization first.'));
     if (!profileDone) {
-      var [pf, setPf] = useState({ respondent_name: user.name, role: '', years_involved: '', paid_volunteer: '', finance_involvement: '', mission_description: '', recent_highlight: '', mission_alignment: '', financial_health_rating: '', concerns_text: '' });
-      var [ipWords, setIPW] = useState([]); var [ipWhy, setIPWhy] = useState('');
+      if (pf.respondent_name === '' && user && user.name) setPf(function(prev) { return Object.assign({}, prev, { respondent_name: user.name }); });
       var roles = ['Senior Leader (Pastor, ED, CEO)', 'Board Chair', 'Board Member', 'Board Treasurer', 'Board Finance Committee Member', 'Finance Committee Member', 'Finance Staff', 'Bookkeeper', 'Admin Staff', 'Program or Ministry Staff', 'Ops or Facilities', 'Volunteer (leadership)', 'Volunteer (general)', 'Other'];
       var finOpts = ['I manage finances day-to-day', 'I approve or review financial info', "I receive reports but don't manage", 'No direct involvement', 'I handle a department or program budget only'];
       var healthOpts = ['Strong', 'Good enough', 'Not sure', 'A little worried', 'Very concerned'];
@@ -622,7 +717,7 @@ export default function App() {
       React.createElement('nav', { className: 'sb' },
         React.createElement('div', { className: 'sb-hd' }, React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8 } }, React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 24, height: 24, borderRadius: '50%' } }), React.createElement('div', null, React.createElement('span', { style: { color: '#fff', fontSize: 11, fontWeight: 600, letterSpacing: .5, display: 'block' } }, 'PROVIDENT'), React.createElement('span', { style: { color: 'var(--g)', fontSize: 8, fontWeight: 500, letterSpacing: 1.5, textTransform: 'uppercase' } }, 'Accountability'))), React.createElement('div', { className: 'sb-org' }, co ? co.name : ''), React.createElement('div', { className: 'mt' }, R.respondent_count, ' Respondents')),
         React.createElement('div', { className: 'sb-nav' }, sideSecs.map(function(it) { return React.createElement('div', { key: it.id, className: 'sb-it' + (dashPage === it.id ? ' act' : ''), onClick: function() { setDP(it.id); } }, it.score !== undefined ? React.createElement('span', { className: 'sb-dot', style: { background: sc(it.score) } }) : null, it.label, it.pri === 'HIGH' ? React.createElement('span', { style: { marginLeft: 'auto', fontSize: 10 } }, '⚠') : null); })),
-        React.createElement('div', { className: 'sb-ft' }, React.createElement('button', { style: { background: 'none', border: 'none', color: 'var(--mt)', fontSize: 11, padding: '4px 0', cursor: 'pointer', fontFamily: "'Montserrat',sans-serif" }, onMouseEnter: function(e) { e.target.style.color = 'var(--g)'; }, onMouseLeave: function(e) { e.target.style.color = 'var(--mt)'; }, onClick: function() { setPage('home'); } }, '← Back to Home'))
+        React.createElement('div', { className: 'sb-ft' }, React.createElement('button', { style: { background: 'none', border: 'none', color: 'var(--mt)', fontSize: 11, padding: '4px 0', cursor: 'pointer', fontFamily: "'Montserrat',sans-serif" }, onMouseEnter: function(e) { e.target.style.color = 'var(--g)'; }, onMouseLeave: function(e) { e.target.style.color = 'var(--mt)'; }, onClick: function() { flushSaveTimer(); setPage('home'); } }, '← Back to Home'))
       ),
       React.createElement('div', { className: 'main-r' }, content || React.createElement('div', { className: 'card' }, 'Select a page from the sidebar.'))
     );
@@ -631,14 +726,18 @@ export default function App() {
   // MAIN LAYOUT — Report gets its own layout with sidebar
   if (page === 'report') return React.createElement(ReportDash);
 
-  var navItems = [{ id: 'home', label: 'Home' }, { id: 'assess', label: 'Assessment' }, { id: 'team', label: 'Team' }];
+  var navItems = [{ id: 'home', label: 'Home' }];
+  var myRole = getMyOrgRole();
+  if (myRole === 'admin' || myRole === 'super_admin' || myRole === 'respondent') navItems.push({ id: 'assess', label: 'Assessment' });
+  if (myRole === 'admin' || myRole === 'super_admin') navItems.push({ id: 'team', label: 'Team' });
   if (report) navItems.push({ id: 'report', label: 'Report' });
+  if (isSuperAdmin()) navItems.push({ id: 'admin', label: 'Admin' });
 
   return React.createElement('div', { style: { minHeight: '100vh', background: 'var(--bg)' } },
     loadingEl,
     React.createElement('div', { id: 'toast', className: 'toast' }),
     React.createElement('div', { className: 'nav-top' },
-      React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }, onClick: function() { setPage('home'); } },
+      React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }, onClick: function() { flushSaveTimer(); setPage('home'); } },
         React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 28, height: 28, borderRadius: '50%' } }),
         React.createElement('span', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 15, color: '#fff' } }, 'Provident')
       ),
@@ -668,29 +767,72 @@ export default function App() {
           ),
           React.createElement('div', { className: 'card' }, React.createElement('h3', { style: { fontSize: 16, marginBottom: 12 } }, 'Quick Actions'),
             React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
-              React.createElement('button', { className: 'btn btn-p', onClick: function() { setPage('assess'); if (!profileDone) setCurSec(0); } }, progressPct > 0 ? 'Continue' : 'Start', ' Assessment'),
-              React.createElement('button', { className: 'btn btn-o', onClick: function() { setPage('team'); } }, 'Invite Team'),
+              (myRole === 'admin' || myRole === 'super_admin' || myRole === 'respondent') ? React.createElement('button', { className: 'btn btn-p', onClick: function() { setPage('assess'); if (!profileDone) setCurSec(0); } }, progressPct > 0 ? 'Continue' : 'Start', ' Assessment') : null,
+              isOrgAdmin() ? React.createElement('button', { className: 'btn btn-o', onClick: function() { setPage('team'); } }, 'Manage Team') : null,
               report ? React.createElement('button', { className: 'btn btn-g', onClick: function() { setPage('report'); setDP('dashboard'); } }, 'View Report')
-                : React.createElement('button', { className: 'btn btn-g', disabled: generating, onClick: genReport }, generating ? 'Generating...' : 'Generate Report')
-            )
+                : isOrgAdmin() ? React.createElement('button', { className: 'btn btn-g', disabled: generating, onClick: genReport }, generating ? 'Generating...' : 'Generate Report') : null
+            ),
+            myRole ? React.createElement('div', { className: 'mt', style: { marginTop: 8 } }, 'Your role: ', React.createElement('span', { style: { fontWeight: 600, color: 'var(--n)' } }, myRole === 'super_admin' ? 'Super Admin' : myRole.charAt(0).toUpperCase() + myRole.slice(1))) : null
           ),
-          React.createElement('div', { style: { marginTop: 16, display: 'flex', gap: 8 } }, React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12 }, onClick: function() { setOF(Object.assign({ id: co.id }, co)); setPage('org_edit'); } }, 'Edit Organization'), React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12 }, onClick: function() { setOF({ name: '' }); setPage('org_edit'); } }, '+ Add Organization'))
+          isOrgAdmin() ? React.createElement('div', { style: { marginTop: 16, display: 'flex', gap: 8 } }, React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12 }, onClick: function() { setOF(Object.assign({ id: co.id }, co)); setPage('org_edit'); } }, 'Edit Organization'), React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12 }, onClick: function() { setOF({ name: '' }); setPage('org_edit'); } }, '+ Add Organization')) : null
         ) : null
       ) : null,
 
       page === 'assess' ? React.createElement(AssessPage) : null,
 
       page === 'team' ? React.createElement('div', null,
-        React.createElement('h1', { className: 'pg-t' }, 'Team & Invitations'), React.createElement('p', { className: 'pg-s' }, 'Invite others to take the assessment independently.'),
-        React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
+        React.createElement('h1', { className: 'pg-t' }, 'Team Management'), React.createElement('p', { className: 'pg-s' }, 'Manage team members and their roles.'),
+
+        // Invite section
+        isOrgAdmin() ? React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
+          React.createElement('h3', { style: { fontSize: 14, marginBottom: 8 } }, 'Invite New Member'),
           React.createElement('div', { style: { display: 'flex', gap: 8 } },
             React.createElement('input', { className: 'inp', style: { flex: 1 }, type: 'email', placeholder: 'Email address', value: invEmail, onChange: function(e) { setIE(e.target.value); }, onKeyDown: function(e) { if (e.key === 'Enter') sendInvite(); } }),
             React.createElement('button', { className: 'btn btn-p', disabled: !invEmail.trim(), onClick: sendInvite }, 'Invite')
           ),
           React.createElement('p', { className: 'mt', style: { marginTop: 8 } }, "They'll receive a link to take the assessment. Their responses are confidential.")
+        ) : null,
+
+        // Members section with roles
+        React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
+          React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 } },
+            React.createElement('h3', { style: { fontSize: 16 } }, 'Members'),
+            React.createElement('button', { className: 'btn btn-o', style: { fontSize: 11, padding: '4px 10px' }, onClick: loadMembers }, 'Refresh')
+          ),
+          orgMembers.length === 0 ? React.createElement('div', null,
+            React.createElement('p', { className: 'mt' }, 'Loading members...'),
+            React.createElement('script', { dangerouslySetInnerHTML: { __html: '' } })
+          ) : orgMembers.map(function(m, i) {
+            var roleColors = { admin: { bg: 'rgba(12,46,62,.1)', color: 'var(--n)' }, respondent: { bg: 'rgba(63,111,89,.1)', color: 'var(--gr)' }, viewer: { bg: 'rgba(206,157,49,.1)', color: 'var(--g)' } };
+            var rc = roleColors[m.role] || roleColors.respondent;
+            return React.createElement('div', { key: m.user_id, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < orgMembers.length - 1 ? '1px solid var(--bg)' : 'none' } },
+              React.createElement('div', { style: { width: 32, height: 32, borderRadius: '50%', background: 'var(--n)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 } }, (m.name || '?')[0].toUpperCase()),
+              React.createElement('div', { style: { flex: 1 } },
+                React.createElement('div', { style: { fontSize: 14, fontWeight: 600 } }, m.name),
+                React.createElement('div', { className: 'mt' }, m.email)
+              ),
+              React.createElement('span', { style: { fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 4, background: rc.bg, color: rc.color } }, m.role.charAt(0).toUpperCase() + m.role.slice(1)),
+              m.respondent_status ? React.createElement('span', { className: 'mt', style: { fontSize: 10 } }, m.respondent_status) : null,
+              isOrgAdmin() && Number(m.user_id) !== user.id ? React.createElement('select', {
+                value: m.role,
+                onChange: function(e) { setMemberRole(m.user_id, e.target.value); },
+                style: { fontSize: 11, padding: '3px 6px', borderRadius: 4, border: '1px solid var(--br)', background: 'var(--w)' }
+              },
+                React.createElement('option', { value: 'admin' }, 'Admin'),
+                React.createElement('option', { value: 'respondent' }, 'Respondent'),
+                React.createElement('option', { value: 'viewer' }, 'Viewer')
+              ) : null,
+              isOrgAdmin() && Number(m.user_id) !== user.id ? React.createElement('button', {
+                style: { fontSize: 11, padding: '3px 8px', borderRadius: 4, border: '1px solid rgba(200,50,50,.3)', background: 'transparent', color: '#c83232', cursor: 'pointer', fontWeight: 600 },
+                onClick: function() { removeMember(m.user_id, m.name); }
+              }, 'Remove') : null
+            );
+          })
         ),
+
+        // Pending invites
         invites.length > 0 ? React.createElement('div', { className: 'card' },
-          React.createElement('h3', { style: { fontSize: 16, marginBottom: 12 } }, 'Invited (', invites.length, ')'),
+          React.createElement('h3', { style: { fontSize: 16, marginBottom: 12 } }, 'Pending Invitations (', invites.length, ')'),
           invites.map(function(inv, i) { return React.createElement('div', { key: i, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < invites.length - 1 ? '1px solid var(--bg)' : 'none' } },
             React.createElement('div', { style: { width: 32, height: 32, borderRadius: '50%', background: 'var(--sl)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700 } }, (inv.email || '?')[0].toUpperCase()),
             React.createElement('div', { style: { flex: 1 } }, React.createElement('div', { style: { fontSize: 14, fontWeight: 600 } }, inv.email)),
@@ -698,6 +840,60 @@ export default function App() {
             inv.status === 'pending' ? React.createElement('button', { style: { fontSize: 11, padding: '3px 8px', borderRadius: 4, border: '1px solid rgba(200,50,50,.3)', background: 'transparent', color: '#c83232', cursor: 'pointer', fontWeight: 600 }, onClick: function() { revokeInvite(inv.uuid); } }, 'Revoke') : null
           ); })
         ) : null
+      ) : null,
+
+      // SUPER ADMIN PAGE
+      page === 'admin' && isSuperAdmin() ? React.createElement('div', null,
+        React.createElement('h1', { className: 'pg-t' }, 'Platform Administration'),
+        React.createElement('p', { className: 'pg-s' }, 'Super Admin Dashboard'),
+
+        // Stats cards
+        adminData.stats ? React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 12, marginBottom: 20 } },
+          React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid var(--n)' } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Users'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, adminData.stats.users.active)),
+          React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid var(--gr)' } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Organizations'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, adminData.stats.orgs.total)),
+          React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid var(--bl)' } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Assessments'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, adminData.stats.assessments.total)),
+          React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid var(--g)' } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Reports'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, adminData.stats.reports.total))
+        ) : null,
+
+        // All Organizations
+        React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
+          React.createElement('h3', { style: { fontSize: 16, marginBottom: 12 } }, 'All Organizations (', adminData.orgs.length, ')'),
+          adminData.orgs.map(function(org, i) {
+            return React.createElement('div', { key: org.id, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < adminData.orgs.length - 1 ? '1px solid var(--bg)' : 'none' } },
+              React.createElement('div', { style: { flex: 1 } },
+                React.createElement('div', { style: { fontSize: 14, fontWeight: 600 } }, org.name),
+                React.createElement('div', { className: 'mt' }, 'Owner: ', org.owner_name || 'Unknown', ' (', org.owner_email || '', ')')
+              ),
+              React.createElement('div', { style: { textAlign: 'right' } },
+                React.createElement('div', { className: 'mt' }, org.member_count || 0, ' members'),
+                org.latest_score ? React.createElement('div', { style: { fontSize: 12, fontWeight: 600, color: sc(org.latest_score) } }, 'Score: ', org.latest_score) : null,
+                org.latest_risk ? React.createElement('span', { className: 'pri ' + (org.latest_risk === 'Critical' || org.latest_risk === 'Elevated' ? 'pri-h' : org.latest_risk === 'Moderate' ? 'pri-m' : 'pri-l'), style: { fontSize: 9, marginLeft: 4 } }, org.latest_risk) : null
+              ),
+              React.createElement('button', { className: 'btn btn-o', style: { fontSize: 11, padding: '4px 10px' }, onClick: function() { setAO(org.id); loadOrg(org.id); setPage('home'); } }, 'View')
+            );
+          })
+        ),
+
+        // All Users
+        React.createElement('div', { className: 'card' },
+          React.createElement('h3', { style: { fontSize: 16, marginBottom: 12 } }, 'All Users (', adminData.users.length, ')'),
+          adminData.users.map(function(u, i) {
+            var isDeactivated = !!u.deleted_at;
+            return React.createElement('div', { key: u.id, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < adminData.users.length - 1 ? '1px solid var(--bg)' : 'none', opacity: isDeactivated ? 0.5 : 1 } },
+              React.createElement('div', { style: { width: 32, height: 32, borderRadius: '50%', background: u.site_role === 'super_admin' ? 'var(--g)' : 'var(--n)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: u.site_role === 'super_admin' ? 'var(--n)' : '#fff', fontSize: 12, fontWeight: 700 } }, (u.name || '?')[0].toUpperCase()),
+              React.createElement('div', { style: { flex: 1 } },
+                React.createElement('div', { style: { fontSize: 14, fontWeight: 600 } }, u.name, isDeactivated ? ' (Deactivated)' : ''),
+                React.createElement('div', { className: 'mt' }, u.email)
+              ),
+              React.createElement('span', { style: { fontSize: 11, fontWeight: 600, padding: '3px 8px', borderRadius: 4, background: u.site_role === 'super_admin' ? 'rgba(206,157,49,.15)' : 'rgba(12,46,62,.08)', color: u.site_role === 'super_admin' ? 'var(--g)' : 'var(--mt)' } }, u.site_role === 'super_admin' ? 'Super Admin' : 'User'),
+              React.createElement('div', { className: 'mt', style: { textAlign: 'right', minWidth: 60 } }, u.org_count || 0, ' orgs'),
+              u.id !== user.id ? (isDeactivated
+                ? React.createElement('button', { className: 'btn btn-o', style: { fontSize: 11, padding: '4px 10px' }, onClick: function() { adminReactivateUser(u.id); } }, 'Reactivate')
+                : React.createElement('button', { style: { fontSize: 11, padding: '3px 8px', borderRadius: 4, border: '1px solid rgba(200,50,50,.3)', background: 'transparent', color: '#c83232', cursor: 'pointer', fontWeight: 600 }, onClick: function() { adminDeactivateUser(u.id); } }, 'Deactivate')
+              ) : null
+            );
+          })
+        )
       ) : null
     ),
     React.createElement('div', { style: { background: 'var(--n)', padding: '24px 20px', textAlign: 'center', marginTop: 40 } },

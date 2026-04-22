@@ -7,6 +7,9 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(255) NOT NULL,
     role VARCHAR(20) DEFAULT 'owner',
+    site_role VARCHAR(20) DEFAULT 'user',
+    reset_token VARCHAR(100) DEFAULT NULL,
+    reset_token_expires TIMESTAMPTZ DEFAULT NULL,
     last_login_at TIMESTAMPTZ DEFAULT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -80,6 +83,20 @@ CREATE TABLE IF NOT EXISTS organizations (
     deleted_at TIMESTAMPTZ DEFAULT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_orgs_owner ON organizations(owner_id);
+
+CREATE TABLE IF NOT EXISTS org_members (
+    id BIGSERIAL PRIMARY KEY,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    org_id BIGINT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL DEFAULT 'respondent',
+    invited_by BIGINT DEFAULT NULL REFERENCES users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, org_id)
+);
+CREATE INDEX IF NOT EXISTS idx_org_members_user ON org_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_org_members_org ON org_members(org_id);
+CREATE INDEX IF NOT EXISTS idx_org_members_org_role ON org_members(org_id, role);
 
 CREATE TABLE IF NOT EXISTS assessments (
     id BIGSERIAL PRIMARY KEY,

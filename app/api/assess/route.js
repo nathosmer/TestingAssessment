@@ -1,5 +1,5 @@
 import { sql } from '@vercel/postgres';
-import { requireAuth, generateUUID, respond } from '../../../lib/auth';
+import { requireAuth, generateUUID, respond, checkOrgAccess } from '../../../lib/auth';
 import { sendInviteEmail } from '../../../lib/email';
 
 async function getOrCreateResp(userId, orgId) {
@@ -115,10 +115,17 @@ export async function POST(request) {
     if (action === 'accept_invite') {
     const token = input.token || '';
     if (!token) return respond({ error: 'Token required' }, 400);
-    const inv = await sql`SELECT * FROM invites WHERE token = ${token} AND status = 'pending'`;
+    const inv = await sql`SELECT * FROM invites WHERE token = ${token} AND status = 'pending' AND (expires_at IS NULL OR expires_at > NOW())`;
     if (inv.rows.length === 0) return respond({ error: 'Invalid invite' }, 404);
     const invite = inv.rows[0];
     await sql`UPDATE invites SET status = 'accepted', accepted_at = NOW() WHERE id = ${invite.id}`;
+    // Auto-create org_member as respondent if the accepting user is logged in
+    const acceptingUser = await requireAuth(request);
+    if (acceptingUser) {
+      await sql`INSERT INTO org_members (user_id, org_id, role, invited_by)
+        VALUES (${acceptingUser.id}, ${invite.org_id}, 'respondent', ${invite.invited_by})
+        ON CONFLICT (user_id, org_id) DO NOTHING`;
+    }
     return respond({ ok: true, org_id: Number(invite.org_id), assessment_id: Number(invite.assessment_id), email: invite.email });
   }
 
@@ -126,12 +133,25 @@ export async function POST(request) {
   if (!user) return respond({ error: 'Not authenticated' }, 401);
   if (!orgId && action !== 'accept_invite') return respond({ error: 'org_id required' }, 400);
 
-  // Verify access
-  const ownerCheck = await sql`SELECT id FROM organizations WHERE id = ${orgId} AND owner_id = ${user.id}`;
-  const isOwner = ownerCheck.rows.length > 0;
-  if (!isOwner) {
+  // Role-based access check
+  const access = await checkOrgAccess(user, orgId, ['admin', 'respondent', 'viewer']);
+  if (!access.allowed) {
+    // Fallback: check legacy invites for users who haven't been migrated to org_members yet
     const invCheck = await sql`SELECT id FROM invites WHERE org_id = ${orgId} AND email = ${user.email} AND status IN ('accepted','started','completed')`;
     if (invCheck.rows.length === 0) return respond({ error: 'Access denied' }, 403);
+    // Auto-migrate: add them as respondent in org_members
+    try {
+      await sql`INSERT INTO org_members (user_id, org_id, role) VALUES (${user.id}, ${orgId}, 'respondent') ON CONFLICT (user_id, org_id) DO NOTHING`;
+    } catch (e) { /* ignore migration errors */ }
+    access.allowed = true;
+    access.role = 'respondent';
+  }
+  const isAdmin = access.role === 'admin' || access.role === 'super_admin';
+
+  // Viewers cannot take assessments — only view reports
+  const assessmentActions = ['profile', 'save_answers', 'save_pulse', 'complete'];
+  if (access.role === 'viewer' && assessmentActions.includes(action)) {
+    return respond({ error: 'Report viewers cannot take assessments' }, 403);
   }
 
   // Save profile
@@ -295,7 +315,7 @@ export async function POST(request) {
 
   // Create invite
   if (action === 'invite') {
-    if (!isOwner) return respond({ error: 'Admin only' }, 403);
+    if (!isAdmin) return respond({ error: 'Admin only' }, 403);
     const email = (input.email || '').toLowerCase().trim();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return respond({ error: 'Valid email required' }, 400);
     const aResult = await sql`SELECT id FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
@@ -322,7 +342,7 @@ export async function POST(request) {
 
   // Revoke invite
   if (action === 'revoke_invite') {
-    if (!isOwner) return respond({ error: 'Admin only' }, 403);
+    if (!isAdmin) return respond({ error: 'Admin only' }, 403);
     const invUuid = input.invite_uuid || '';
     if (!invUuid) return respond({ error: 'invite_uuid required' }, 400);
     const inv = await sql`SELECT id, status FROM invites WHERE uuid = ${invUuid} AND org_id = ${orgId}`;
@@ -333,8 +353,58 @@ export async function POST(request) {
     return respond({ ok: true });
   }
 
+  // Manage org member roles (admin only)
+  if (action === 'set_member_role') {
+    if (!isAdmin) return respond({ error: 'Admin only' }, 403);
+    const targetUserId = input.user_id;
+    const newRole = input.role;
+    if (!targetUserId || !newRole) return respond({ error: 'user_id and role required' }, 400);
+    if (!['admin', 'respondent', 'viewer'].includes(newRole)) return respond({ error: 'Invalid role' }, 400);
+    // Prevent removing last admin
+    if (newRole !== 'admin') {
+      const adminCount = await sql`SELECT COUNT(*) as cnt FROM org_members WHERE org_id = ${orgId} AND role = 'admin'`;
+      const isTarget = await sql`SELECT role FROM org_members WHERE user_id = ${targetUserId} AND org_id = ${orgId}`;
+      if (isTarget.rows[0]?.role === 'admin' && Number(adminCount.rows[0].cnt) <= 1) {
+        return respond({ error: 'Cannot remove the last admin' }, 400);
+      }
+    }
+    await sql`UPDATE org_members SET role = ${newRole}, updated_at = NOW() WHERE user_id = ${targetUserId} AND org_id = ${orgId}`;
+    return respond({ ok: true });
+  }
+
+  // Remove org member (admin only)
+  if (action === 'remove_member') {
+    if (!isAdmin) return respond({ error: 'Admin only' }, 403);
+    const targetUserId = input.user_id;
+    if (!targetUserId) return respond({ error: 'user_id required' }, 400);
+    if (Number(targetUserId) === user.id) return respond({ error: 'Cannot remove yourself' }, 400);
+    // Prevent removing last admin
+    const target = await sql`SELECT role FROM org_members WHERE user_id = ${targetUserId} AND org_id = ${orgId}`;
+    if (target.rows[0]?.role === 'admin') {
+      const adminCount = await sql`SELECT COUNT(*) as cnt FROM org_members WHERE org_id = ${orgId} AND role = 'admin'`;
+      if (Number(adminCount.rows[0].cnt) <= 1) return respond({ error: 'Cannot remove the last admin' }, 400);
+    }
+    await sql`DELETE FROM org_members WHERE user_id = ${targetUserId} AND org_id = ${orgId}`;
+    return respond({ ok: true });
+  }
+
+  // List org members (admin only)
+  if (action === 'members') {
+    if (!isAdmin) return respond({ error: 'Admin only' }, 403);
+    const result = await sql`
+      SELECT om.user_id, om.role, om.created_at, u.name, u.email,
+        (SELECT status FROM respondents WHERE user_id = om.user_id AND org_id = om.org_id ORDER BY created_at DESC LIMIT 1) as respondent_status,
+        (SELECT progress_pct FROM respondents WHERE user_id = om.user_id AND org_id = om.org_id ORDER BY created_at DESC LIMIT 1) as progress_pct
+      FROM org_members om
+      JOIN users u ON om.user_id = u.id
+      WHERE om.org_id = ${orgId}
+      ORDER BY CASE om.role WHEN 'admin' THEN 1 WHEN 'respondent' THEN 2 WHEN 'viewer' THEN 3 END, u.name
+    `;
+    return respond({ members: result.rows });
+  }
+
   if (action === 'reset_generating') {
-    if (!isOwner) return respond({ error: 'Admin only' }, 403);
+    if (!isAdmin) return respond({ error: 'Admin only' }, 403);
     const assessResult = await sql`SELECT id, status FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
     if (assessResult.rows.length === 0) return respond({ error: 'No assessment' }, 404);
     if (assessResult.rows[0].status === 'generating') {

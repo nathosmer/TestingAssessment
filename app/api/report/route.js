@@ -1,5 +1,5 @@
 import { sql } from '@vercel/postgres';
-import { requireAuth, generateUUID, respond } from '../../../lib/auth';
+import { requireAuth, generateUUID, respond, checkOrgAccess } from '../../../lib/auth';
 
 export const maxDuration = 60;
 
@@ -14,10 +14,14 @@ export async function GET(request) {
   const orgId = searchParams.get('org_id');
   if (!orgId) return respond({ error: 'org_id required' }, 400);
 
+  // Viewers, respondents, admins, and super admins can view reports
+  const access = await checkOrgAccess(user, orgId, ['admin', 'respondent', 'viewer']);
+  if (!access.allowed) return respond({ error: 'Access denied' }, 403);
+
   const r = await sql`SELECT uuid, report_json, respondent_count, overall_score, risk_level, created_at FROM reports WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
   if (r.rows.length > 0) {
     const row = r.rows[0];
-    row.report_json = JSON.parse(row.report_json);
+    try { row.report_json = JSON.parse(row.report_json); } catch (e) { row.report_json = null; }
     return respond({ report: row });
   }
   return respond({ report: null });
@@ -34,8 +38,11 @@ export async function POST(request) {
     const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
     if (!ANTHROPIC_API_KEY) return respond({ error: 'ANTHROPIC_API_KEY not configured' }, 500);
 
-    // Verify ownership
-    const orgResult = await sql`SELECT * FROM organizations WHERE id = ${orgId} AND owner_id = ${user.id}`;
+    // Only admins and super admins can generate reports
+    const access = await checkOrgAccess(user, orgId, ['admin']);
+    if (!access.allowed) return respond({ error: 'Only organization admins can generate reports' }, 403);
+
+    const orgResult = await sql`SELECT * FROM organizations WHERE id = ${orgId}`;
     const org = orgResult.rows[0];
     if (!org) return respond({ error: 'Not found' }, 404);
 
@@ -43,21 +50,19 @@ export async function POST(request) {
     const existing = await sql`SELECT uuid, report_json, respondent_count, overall_score, risk_level, created_at FROM reports WHERE org_id = ${orgId} AND created_at > NOW() - INTERVAL '5 minutes' ORDER BY created_at DESC LIMIT 1`;
     if (existing.rows.length > 0) {
       const row = existing.rows[0];
-      row.report_json = JSON.parse(row.report_json);
+      try { row.report_json = JSON.parse(row.report_json); } catch (e) { row.report_json = null; }
       return respond({ report: row, cached: true });
     }
 
-    // H-07: Check/set generating flag on assessment
-    const assessResult = await sql`SELECT id, status FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
+    // H-07: Atomic check/set generating flag (prevents race condition)
+    const assessResult = await sql`SELECT id FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
     if (assessResult.rows.length === 0) return respond({ error: 'No assessment' }, 404);
     const aid = assessResult.rows[0].id;
 
-    if (assessResult.rows[0]?.status === 'generating') {
+    const lockResult = await sql`UPDATE assessments SET status = 'generating' WHERE id = ${aid} AND status != 'generating' RETURNING id`;
+    if (lockResult.rows.length === 0) {
       return respond({ error: 'Report generation already in progress' }, 409);
     }
-
-    // Set generating status
-    await sql`UPDATE assessments SET status = 'generating' WHERE id = ${aid}`;
 
   // Get completed respondents
   const respondentsResult = await sql`SELECT * FROM respondents WHERE assessment_id = ${aid} AND status = 'completed'`;
@@ -279,7 +284,7 @@ IMPORTANT: Include all 13 sections in the sections array. Keep each section conc
   if (!apiResponse.ok) {
     const detail = await apiResponse.json().catch(() => ({}));
     // Reset generating status on API failure
-    await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid}`;
+    await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid} AND status = 'generating'`;
     return respond({ error: `API returned ${apiResponse.status}`, detail }, 502);
   }
 
@@ -287,7 +292,7 @@ IMPORTANT: Include all 13 sections in the sections array. Keep each section conc
 
   // Check if response was truncated
   if (apiData.stop_reason === 'max_tokens') {
-    await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid}`;
+    await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid} AND status = 'generating'`;
     return respond({ error: 'AI response was truncated (too long). Please try again.' }, 500);
   }
 
@@ -301,7 +306,7 @@ IMPORTANT: Include all 13 sections in the sections array. Keep each section conc
   const firstBrace = text.indexOf('{');
   const lastBrace = text.lastIndexOf('}');
   if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
-    await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid}`;
+    await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid} AND status = 'generating'`;
     return respond({ error: 'No JSON object found in AI response', raw: text.slice(0, 500) }, 500);
   }
   text = text.slice(firstBrace, lastBrace + 1);
@@ -314,7 +319,7 @@ IMPORTANT: Include all 13 sections in the sections array. Keep each section conc
     try {
       report = JSON.parse(cleaned);
     } catch (e2) {
-      await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid}`;
+      await sql`UPDATE assessments SET status = 'active' WHERE id = ${aid} AND status = 'generating'`;
       return respond({ error: 'Failed to parse AI response', raw: text.slice(0, 500), parseError: e2.message }, 500);
     }
   }
@@ -349,7 +354,7 @@ IMPORTANT: Include all 13 sections in the sections array. Keep each section conc
       if (orgId) {
         const assessResult = await sql`SELECT id FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
         if (assessResult.rows.length > 0) {
-          await sql`UPDATE assessments SET status = 'active' WHERE id = ${assessResult.rows[0].id}`;
+          await sql`UPDATE assessments SET status = 'active' WHERE id = ${assessResult.rows[0].id} AND status = 'generating'`;
         }
       }
     } catch (e) {

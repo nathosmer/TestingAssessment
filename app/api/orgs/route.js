@@ -1,5 +1,5 @@
 import { sql } from '@vercel/postgres';
-import { requireAuth, generateUUID, respond } from '../../../lib/auth';
+import { requireAuth, generateUUID, respond, checkOrgAccess, getOrgRole } from '../../../lib/auth';
 
 const ORG_FIELDS = ['org_type','annual_budget','employees_ft','employees_pt','contractors','volunteers','locations',
   'address_street','address_city','address_state','address_zip','year_founded',
@@ -12,130 +12,140 @@ export async function OPTIONS() {
 }
 
 export async function GET(request) {
-  try {
-    const user = await requireAuth(request);
-    if (!user) return respond({ error: 'Not authenticated' }, 401);
-    const { searchParams } = new URL(request.url);
-    const orgId = searchParams.get('id');
+  const user = await requireAuth(request);
+  if (!user) return respond({ error: 'Not authenticated' }, 401);
+  const { searchParams } = new URL(request.url);
+  const orgId = searchParams.get('id');
 
-    if (!orgId) {
-      const result = await sql`
-        SELECT o.*, (SELECT COUNT(*) FROM assessments WHERE org_id = o.id) as assessment_count, 'owner' as user_role
-        FROM organizations o WHERE o.owner_id = ${user.id} AND o.deleted_at IS NULL
-        UNION
-        SELECT DISTINCT o.*, (SELECT COUNT(*) FROM assessments WHERE org_id = o.id) as assessment_count, 'member' as user_role
-        FROM organizations o
-        JOIN invites i ON i.org_id = o.id
-        WHERE i.email = ${user.email} AND i.status IN ('accepted','started','completed')
-        AND o.deleted_at IS NULL AND o.owner_id != ${user.id}
-        ORDER BY updated_at DESC
+  if (!orgId) {
+    // List orgs: super admins see all, regular users see orgs they're a member of
+    let result;
+    if (user.site_role === 'super_admin') {
+      result = await sql`
+        SELECT o.*, 'super_admin' as my_role,
+          (SELECT COUNT(*) FROM assessments WHERE org_id = o.id) as assessment_count
+        FROM organizations o WHERE o.deleted_at IS NULL
+        ORDER BY o.updated_at DESC
       `;
-      return respond({ orgs: result.rows });
+    } else {
+      result = await sql`
+        SELECT o.*, om.role as my_role,
+          (SELECT COUNT(*) FROM assessments WHERE org_id = o.id) as assessment_count
+        FROM organizations o
+        JOIN org_members om ON om.org_id = o.id AND om.user_id = ${user.id}
+        WHERE o.deleted_at IS NULL
+        ORDER BY o.updated_at DESC
+      `;
     }
-
-    let result = await sql`SELECT * FROM organizations WHERE id = ${orgId} AND owner_id = ${user.id} AND deleted_at IS NULL`;
-    if (result.rows.length === 0) {
-      result = await sql`SELECT o.* FROM organizations o JOIN invites i ON i.org_id = o.id WHERE o.id = ${orgId} AND i.email = ${user.email} AND i.status IN ('accepted','started','completed') AND o.deleted_at IS NULL LIMIT 1`;
-    }
-    const org = result.rows[0];
-    if (!org) return respond({ error: 'Not found' }, 404);
-
-    const assessment = await sql`SELECT id, uuid, status, respondent_completed, overall_score, risk_level, created_at FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
-    org.latest_assessment = assessment.rows[0] || null;
-
-    if (org.latest_assessment) {
-      const stats = await sql`SELECT status, COUNT(*) as cnt FROM respondents WHERE assessment_id = ${org.latest_assessment.id} GROUP BY status`;
-      org.respondent_stats = stats.rows;
-    }
-
-    return respond({ org });
-  } catch (error) {
-    console.error('GET orgs error:', error);
-    return respond({ error: 'Server error' }, 500);
+    return respond({ orgs: result.rows });
   }
+
+  // Single org detail — check access
+  const access = await checkOrgAccess(user, orgId, ['admin', 'respondent', 'viewer']);
+  if (!access.allowed) return respond({ error: 'Access denied' }, 403);
+
+  const result = await sql`SELECT * FROM organizations WHERE id = ${orgId} AND deleted_at IS NULL`;
+  const org = result.rows[0];
+  if (!org) return respond({ error: 'Not found' }, 404);
+
+  org.my_role = access.role;
+
+  const assessment = await sql`SELECT id, uuid, status, respondent_completed, overall_score, risk_level, created_at FROM assessments WHERE org_id = ${orgId} ORDER BY created_at DESC LIMIT 1`;
+  org.latest_assessment = assessment.rows[0] || null;
+
+  if (org.latest_assessment) {
+    const stats = await sql`SELECT status, COUNT(*) as cnt FROM respondents WHERE assessment_id = ${org.latest_assessment.id} GROUP BY status`;
+    org.respondent_stats = stats.rows;
+  }
+
+  // Include org members list for admins
+  if (access.role === 'admin' || access.role === 'super_admin') {
+    const members = await sql`
+      SELECT om.id, om.user_id, om.role, om.created_at, u.name, u.email
+      FROM org_members om JOIN users u ON om.user_id = u.id
+      WHERE om.org_id = ${orgId}
+      ORDER BY om.role, u.name
+    `;
+    org.members = members.rows;
+  }
+
+  return respond({ org });
 }
 
 export async function POST(request) {
-  try {
-    const user = await requireAuth(request);
-    if (!user) return respond({ error: 'Not authenticated' }, 401);
-    const input = await request.json().catch(() => ({}));
-    const name = (input.name || '').trim();
-    if (!name) return respond({ error: 'Name required' }, 400);
+  const user = await requireAuth(request);
+  if (!user) return respond({ error: 'Not authenticated' }, 401);
+  const input = await request.json().catch(() => ({}));
+  const name = (input.name || '').trim();
+  if (!name) return respond({ error: 'Name required' }, 400);
 
-    const uuid = generateUUID();
+  const uuid = generateUUID();
 
-    // Build dynamic insert (C-03)
-    // ORG_FIELDS is the allowlist of permitted fields
-    const cols = ['uuid', 'owner_id', 'name'];
-    const vals = [uuid, user.id, name];
+  // Build dynamic insert
+  const cols = ['uuid', 'owner_id', 'name'];
+  const vals = [uuid, user.id, name];
 
-    for (const f of ORG_FIELDS) {
-      if (input[f] !== undefined && input[f] !== null && input[f] !== '') {
-        cols.push(f);
-        vals.push(input[f]);
-      }
+  for (const f of ORG_FIELDS) {
+    if (input[f] !== undefined && input[f] !== null && input[f] !== '') {
+      cols.push(f);
+      vals.push(input[f]);
     }
-
-    const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ');
-    const queryText = `INSERT INTO organizations (${cols.join(', ')}) VALUES (${placeholders}) RETURNING id`;
-    const orgResult = await sql.query(queryText, vals);
-    const orgId = orgResult.rows[0].id;
-
-    // Create assessment
-    const aUuid = generateUUID();
-    const assessResult = await sql`INSERT INTO assessments (uuid, org_id, initiated_by, status) VALUES (${aUuid}, ${orgId}, ${user.id}, 'active') RETURNING id`;
-    const aId = assessResult.rows[0].id;
-
-    // Create respondent for admin
-    const rUuid = generateUUID();
-    await sql`INSERT INTO respondents (uuid, assessment_id, org_id, user_id, status) VALUES (${rUuid}, ${aId}, ${orgId}, ${user.id}, 'invited')`;
-
-    const org = await sql`SELECT * FROM organizations WHERE id = ${orgId}`;
-    return respond({ org: org.rows[0] }, 201);
-  } catch (error) {
-    console.error('POST orgs error:', error);
-    return respond({ error: 'Server error' }, 500);
   }
+
+  const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ');
+  const queryText = `INSERT INTO organizations (${cols.join(', ')}) VALUES (${placeholders}) RETURNING id`;
+  const orgResult = await sql.query(queryText, vals);
+  const orgId = orgResult.rows[0].id;
+
+  // Create org_member entry for creator as admin
+  await sql`INSERT INTO org_members (user_id, org_id, role) VALUES (${user.id}, ${orgId}, 'admin')`;
+
+  // Create assessment
+  const aUuid = generateUUID();
+  const assessResult = await sql`INSERT INTO assessments (uuid, org_id, initiated_by, status) VALUES (${aUuid}, ${orgId}, ${user.id}, 'active') RETURNING id`;
+  const aId = assessResult.rows[0].id;
+
+  // Create respondent for creator
+  const rUuid = generateUUID();
+  await sql`INSERT INTO respondents (uuid, assessment_id, org_id, user_id, status) VALUES (${rUuid}, ${aId}, ${orgId}, ${user.id}, 'invited')`;
+
+  const org = await sql`SELECT * FROM organizations WHERE id = ${orgId}`;
+  return respond({ org: org.rows[0] }, 201);
 }
 
 export async function PUT(request) {
-  try {
-    const user = await requireAuth(request);
-    if (!user) return respond({ error: 'Not authenticated' }, 401);
-    const { searchParams } = new URL(request.url);
-    const orgId = searchParams.get('id');
-    if (!orgId) return respond({ error: 'id required' }, 400);
+  const user = await requireAuth(request);
+  if (!user) return respond({ error: 'Not authenticated' }, 401);
+  const { searchParams } = new URL(request.url);
+  const orgId = searchParams.get('id');
+  if (!orgId) return respond({ error: 'id required' }, 400);
 
-    const check = await sql`SELECT id FROM organizations WHERE id = ${orgId} AND owner_id = ${user.id}`;
-    if (check.rows.length === 0) return respond({ error: 'Not found' }, 404);
+  // Only admins and super admins can edit org settings
+  const access = await checkOrgAccess(user, orgId, ['admin']);
+  if (!access.allowed) return respond({ error: 'Access denied' }, 403);
 
-    const input = await request.json().catch(() => ({}));
-    const sets = [];
-    const vals = [];
-    let paramIdx = 1;
+  const input = await request.json().catch(() => ({}));
+  const sets = [];
+  const vals = [];
+  let paramIdx = 1;
 
-    if (input.name) {
-      sets.push(`name = $${paramIdx++}`);
-      vals.push(input.name.trim());
-    }
-    for (const f of ORG_FIELDS) {
-      if (input[f] !== undefined) {
-        sets.push(`${f} = $${paramIdx++}`);
-        vals.push(input[f]);
-      }
-    }
-    if (sets.length === 0) return respond({ error: 'Nothing to update' }, 400);
-
-    sets.push(`updated_at = NOW()`);
-    vals.push(orgId);
-    const queryText = `UPDATE organizations SET ${sets.join(', ')} WHERE id = $${paramIdx}`;
-    await sql.query(queryText, vals);
-
-    const org = await sql`SELECT * FROM organizations WHERE id = ${orgId}`;
-    return respond({ org: org.rows[0] });
-  } catch (error) {
-    console.error('PUT orgs error:', error);
-    return respond({ error: 'Server error' }, 500);
+  if (input.name) {
+    sets.push(`name = $${paramIdx++}`);
+    vals.push(input.name.trim());
   }
+  for (const f of ORG_FIELDS) {
+    if (input[f] !== undefined) {
+      sets.push(`${f} = $${paramIdx++}`);
+      vals.push(input[f]);
+    }
+  }
+  if (sets.length === 0) return respond({ error: 'Nothing to update' }, 400);
+
+  sets.push(`updated_at = NOW()`);
+  vals.push(orgId);
+  const queryText = `UPDATE organizations SET ${sets.join(', ')} WHERE id = $${paramIdx}`;
+  await sql.query(queryText, vals);
+
+  const org = await sql`SELECT * FROM organizations WHERE id = ${orgId}`;
+  return respond({ org: org.rows[0] });
 }
