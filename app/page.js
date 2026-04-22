@@ -375,20 +375,20 @@ export default function App() {
     React.createElement('div', { style: { minHeight: '100vh', background: 'var(--bg)' } },
       loadingEl,
       React.createElement('div', { id: 'toast', className: 'toast' }),
-      React.createElement('div', { style: { background: 'var(--n)', padding: '48px 20px 36px', textAlign: 'center' } },
-        React.createElement('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 12, marginBottom: 14 } },
-          React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 40, height: 40, borderRadius: '50%' } }),
+      React.createElement('div', { style: { background: 'linear-gradient(135deg, #0c2e3e 0%, #1a4a5c 100%)', padding: '56px 20px 44px', textAlign: 'center' } },
+        React.createElement('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 14, marginBottom: 18 } },
+          React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 44, height: 44, borderRadius: '50%', boxShadow: '0 2px 8px rgba(0,0,0,.2)' } }),
           React.createElement('div', { style: { textAlign: 'left' } },
-            React.createElement('span', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 22, color: '#fff', display: 'block' } }, 'Provident'),
-            React.createElement('span', { style: { fontFamily: "'Montserrat',sans-serif", fontWeight: 500, fontSize: 10, color: 'var(--g)', letterSpacing: 2, textTransform: 'uppercase' } }, 'Accountability')
+            React.createElement('span', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 24, color: '#fff', display: 'block' } }, 'Provident'),
+            React.createElement('span', { style: { fontFamily: "'Montserrat',sans-serif", fontWeight: 600, fontSize: 10, color: 'var(--g)', letterSpacing: 2.5, textTransform: 'uppercase' } }, 'Accountability')
           )
         ),
-        React.createElement('h1', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontSize: 26, color: '#fff', margin: '12px 0 6px' } }, 'Financial Stewardship Assessment'),
-        React.createElement('p', { style: { fontFamily: "'Montserrat',sans-serif", fontSize: 14, color: 'rgba(255,255,255,.5)', maxWidth: 400, margin: '0 auto' } }, "Know where you stand. See where you're going."),
-        pendingInvite ? React.createElement('div', { style: { marginTop: 16, padding: '8px 16px', borderRadius: 8, background: 'rgba(206,157,49,.15)', display: 'inline-block' } }, React.createElement('span', { style: { color: 'var(--g)', fontSize: 13, fontWeight: 600 } }, "You've been invited to take an assessment. " + (mode === 'login' ? 'Sign in or create an account to begin.' : 'Create an account to begin.'))) : null
+        React.createElement('h1', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontSize: 28, color: '#fff', margin: '14px 0 8px', letterSpacing: '-.3px' } }, 'Financial Stewardship Assessment'),
+        React.createElement('p', { style: { fontFamily: "'Montserrat',sans-serif", fontSize: 14, color: 'rgba(255,255,255,.5)', maxWidth: 420, margin: '0 auto', lineHeight: 1.6 } }, "Know where you stand. See where you're going."),
+        pendingInvite ? React.createElement('div', { style: { marginTop: 20, padding: '10px 20px', borderRadius: 8, background: 'rgba(206,157,49,.12)', display: 'inline-block', backdropFilter: 'blur(4px)' } }, React.createElement('span', { style: { color: 'var(--g)', fontSize: 13, fontWeight: 600 } }, "You've been invited to take an assessment. " + (mode === 'login' ? 'Sign in or create an account to begin.' : 'Create an account to begin.'))) : null
       ),
-      React.createElement('div', { style: { display: 'flex', justifyContent: 'center', padding: '36px 20px 60px' } },
-        React.createElement('div', { style: { width: '100%', maxWidth: 400 } },
+      React.createElement('div', { style: { display: 'flex', justifyContent: 'center', padding: '40px 20px 60px' } },
+        React.createElement('div', { style: { width: '100%', maxWidth: 420 } },
 
           // Reset password form (from ?reset=TOKEN link)
           mode === 'reset' ? React.createElement('div', null,
@@ -422,9 +422,9 @@ export default function App() {
 
           // Login / Signup forms
           React.createElement('div', null,
-            React.createElement('div', { style: { display: 'flex', background: 'var(--stone)', borderRadius: 8, padding: 3, marginBottom: 24 } },
-              React.createElement('button', { onClick: function() { setMode('login'); setAE(''); }, style: { flex: 1, padding: '9px 0', borderRadius: 6, background: mode === 'login' ? 'var(--w)' : 'transparent', color: mode === 'login' ? 'var(--n)' : 'var(--mt)', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer' } }, 'Sign In'),
-              React.createElement('button', { onClick: function() { setMode('signup'); setAE(''); }, style: { flex: 1, padding: '9px 0', borderRadius: 6, background: mode === 'signup' ? 'var(--w)' : 'transparent', color: mode === 'signup' ? 'var(--n)' : 'var(--mt)', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer' } }, 'Create Account')
+            React.createElement('div', { style: { display: 'flex', background: 'var(--stone)', borderRadius: 8, padding: 3, marginBottom: 28, boxShadow: 'inset 0 1px 3px rgba(0,0,0,.06)' } },
+              React.createElement('button', { onClick: function() { setMode('login'); setAE(''); }, style: { flex: 1, padding: '10px 0', borderRadius: 6, background: mode === 'login' ? 'var(--w)' : 'transparent', color: mode === 'login' ? 'var(--n)' : 'var(--mt)', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer', transition: 'all .2s ease', boxShadow: mode === 'login' ? '0 1px 3px rgba(0,0,0,.08)' : 'none' } }, 'Sign In'),
+              React.createElement('button', { onClick: function() { setMode('signup'); setAE(''); }, style: { flex: 1, padding: '10px 0', borderRadius: 6, background: mode === 'signup' ? 'var(--w)' : 'transparent', color: mode === 'signup' ? 'var(--n)' : 'var(--mt)', fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer', transition: 'all .2s ease', boxShadow: mode === 'signup' ? '0 1px 3px rgba(0,0,0,.08)' : 'none' } }, 'Create Account')
             ),
             React.createElement('div', { className: 'card' },
               mode === 'signup' ? React.createElement('div', { style: { marginBottom: 14 } }, React.createElement('label', { className: 'lbl' }, 'Full Name'), React.createElement('input', { className: 'inp', value: fN, onChange: function(e) { setFN(e.target.value); } })) : null,
@@ -530,14 +530,20 @@ export default function App() {
       React.createElement('h1', { className: 'pg-t' }, 'Assessment Sections'), React.createElement('p', { className: 'pg-s' }, 'Select a section or start from the beginning.'),
       React.createElement('div', { className: 'card' },
         Array.from({ length: 13 }, function(_, i) { return i + 1; }).map(function(s) {
-          var started = secQs(s).some(function(q) { return answers[q.code]; });
-          return React.createElement('div', { key: s, style: { display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: s < 13 ? '1px solid var(--bg)' : 'none', cursor: 'pointer' }, onClick: function() { setCurSec(s); } },
-            React.createElement('span', { style: { fontWeight: 700, color: 'var(--g)', width: 24 } }, s),
-            React.createElement('span', { style: { flex: 1, fontWeight: 500 } }, SNAMES[s]),
-            (function() { var answered = secQs(s).filter(function(q) { return answers[q.code]; }).length; var total = secQs(s).length; return answered > 0 ? React.createElement('span', { style: { fontSize: 11, color: answered === total ? 'var(--gr)' : 'var(--am)' } }, answered, '/', total, answered === total ? ' ✓' : '') : React.createElement('span', { className: 'mt' }, '0/', total); })()
+          var answered = secQs(s).filter(function(q) { return answers[q.code]; }).length;
+          var total = secQs(s).length;
+          var complete = answered === total && total > 0;
+          var started = answered > 0;
+          return React.createElement('div', { key: s, style: { display: 'flex', alignItems: 'center', gap: 14, padding: '12px 8px', borderBottom: s < 13 ? '1px solid var(--bg)' : 'none', cursor: 'pointer', borderRadius: 6, transition: 'background .15s ease', marginBottom: 2 },
+            onMouseEnter: function(e) { e.currentTarget.style.background = 'var(--bg)'; },
+            onMouseLeave: function(e) { e.currentTarget.style.background = 'transparent'; },
+            onClick: function() { setCurSec(s); } },
+            React.createElement('div', { style: { width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, background: complete ? 'var(--gr)' : started ? 'rgba(206,157,49,.12)' : 'rgba(12,46,62,.06)', color: complete ? '#fff' : started ? 'var(--g)' : 'var(--mt)', flexShrink: 0, transition: 'all .2s ease' } }, complete ? '\u2713' : s),
+            React.createElement('span', { style: { flex: 1, fontWeight: 500, fontSize: 14 } }, SNAMES[s]),
+            React.createElement('span', { style: { fontSize: 11, fontWeight: 600, color: complete ? 'var(--gr)' : started ? 'var(--am)' : 'var(--mt)', minWidth: 36, textAlign: 'right' } }, answered, '/', total)
           );
         }),
-        React.createElement('div', { style: { marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--br)' } },
+        React.createElement('div', { style: { marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--br)', textAlign: 'center' } },
           React.createElement('button', { className: 'btn btn-g', onClick: function() { setCurSec(1); } }, 'Start from Section 1')
         )
       )
@@ -579,13 +585,13 @@ export default function App() {
     var pWhy = curPulse.why || '';
 
     return React.createElement('div', null,
-      React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 } },
-        React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12, padding: '5px 12px' }, onClick: function() { setCurSec(0); } }, '← Sections'),
-        React.createElement('div', { style: { flex: 1 } }, React.createElement('h2', { style: { fontSize: 18, margin: 0 } }, 'Section ', curSec, ': ', SNAMES[curSec])),
-        React.createElement('span', { className: 'mt' }, curSec, '/13')
+      React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 } },
+        React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12, padding: '6px 14px' }, onClick: function() { setCurSec(0); } }, '\u2190 Sections'),
+        React.createElement('div', { style: { flex: 1 } }, React.createElement('h2', { style: { fontSize: 18, margin: 0, lineHeight: 1.3 } }, 'Section ', curSec, ': ', SNAMES[curSec])),
+        React.createElement('span', { style: { fontSize: 12, fontWeight: 600, color: 'var(--mt)', background: 'rgba(12,46,62,.04)', padding: '4px 10px', borderRadius: 12 } }, curSec, ' of 13')
       ),
       React.createElement('div', { className: 'prg' }, React.createElement('div', { className: 'prg-f', style: { width: (curSec / 13 * 100) + '%' } })),
-      saveStatus ? React.createElement('div', { style: { fontSize: 11, textAlign: 'right', marginBottom: 8, color: saveStatus === 'saved' ? 'var(--gr)' : saveStatus === 'error' ? 'var(--r)' : 'var(--am)' } }, saveStatus === 'saved' ? '✓ Saved' : saveStatus === 'error' ? 'Save failed' : 'Unsaved changes...') : null,
+      saveStatus ? React.createElement('div', { style: { fontSize: 11, textAlign: 'right', marginBottom: 8, fontWeight: 500, color: saveStatus === 'saved' ? 'var(--gr)' : saveStatus === 'error' ? 'var(--r)' : 'var(--am)' } }, saveStatus === 'saved' ? '\u2713 Saved' : saveStatus === 'error' ? 'Save failed' : 'Unsaved changes...') : null,
       React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
         React.createElement('h3', { style: { fontSize: 14, fontWeight: 700, color: 'var(--g)', marginBottom: 12, letterSpacing: 1, textTransform: 'uppercase' } }, 'Questions'),
         factQs.map(function(q) {
@@ -613,10 +619,10 @@ export default function App() {
         React.createElement('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 4 } }, ELABELS.map(function(w, i) { return React.createElement('span', { key: w, className: 'emo-w' + (pWords.includes(EWORDS[i]) ? ' sel' : ''), onClick: function() { setPulseW(pKey, EWORDS[i]); } }, w); })),
         React.createElement(TextInput, { key: 'pulse_' + pKey, rows: 2, style: { marginTop: 8 }, placeholder: 'Why those words? (optional)', value: pWhy, onChange: function(v) { setPulses(function(prev) { var n = Object.assign({}, prev); n[pKey] = { words: pWords, why: v }; return n; }); } })
       ),
-      React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between' } },
-        React.createElement('button', { className: 'btn btn-o', disabled: curSec <= 1, onClick: async function() { await saveAnswerBatch(curSec); await savePulse(pKey, curSec, pWords, pWhy); setCurSec(curSec - 1); } }, '← Previous'),
-        curSec < 13 ? React.createElement('button', { className: 'btn btn-p', onClick: async function() { await saveAnswerBatch(curSec); await savePulse(pKey, curSec, pWords, pWhy); setCurSec(curSec + 1); } }, 'Next →')
-          : React.createElement('button', { className: 'btn btn-g', onClick: async function() { await saveAnswerBatch(curSec); await savePulse(pKey, curSec, pWords, pWhy); setCurSec(14); } }, 'Final Reflections →')
+      React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 8 } },
+        React.createElement('button', { className: 'btn btn-o', disabled: curSec <= 1, onClick: async function() { await saveAnswerBatch(curSec); await savePulse(pKey, curSec, pWords, pWhy); setCurSec(curSec - 1); } }, '\u2190 Previous'),
+        curSec < 13 ? React.createElement('button', { className: 'btn btn-p', onClick: async function() { await saveAnswerBatch(curSec); await savePulse(pKey, curSec, pWords, pWhy); setCurSec(curSec + 1); } }, 'Next \u2192')
+          : React.createElement('button', { className: 'btn btn-g', onClick: async function() { await saveAnswerBatch(curSec); await savePulse(pKey, curSec, pWords, pWhy); setCurSec(14); } }, 'Final Reflections \u2192')
       )
     );
   }
@@ -737,33 +743,51 @@ export default function App() {
     loadingEl,
     React.createElement('div', { id: 'toast', className: 'toast' }),
     React.createElement('div', { className: 'nav-top' },
-      React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }, onClick: function() { flushSaveTimer(); setPage('home'); } },
-        React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 28, height: 28, borderRadius: '50%' } }),
-        React.createElement('span', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 15, color: '#fff' } }, 'Provident')
+      React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }, onClick: function() { flushSaveTimer(); setPage('home'); } },
+        React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 30, height: 30, borderRadius: '50%' } }),
+        React.createElement('div', { style: { display: 'flex', flexDirection: 'column' } },
+          React.createElement('span', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 16, color: '#fff', lineHeight: 1.1 } }, 'Provident'),
+          React.createElement('span', { style: { fontFamily: "'Montserrat',sans-serif", fontWeight: 600, fontSize: 7, color: 'var(--g)', letterSpacing: 2, textTransform: 'uppercase' } }, 'Accountability')
+        )
       ),
-      React.createElement('div', { style: { display: 'flex', gap: 4, alignItems: 'center' } },
-        navItems.map(function(n) { return React.createElement('button', { key: n.id, onClick: function() { setPage(n.id); if (n.id === 'report') setDP('dashboard'); }, style: { padding: '5px 10px', borderRadius: 5, background: page === n.id ? 'rgba(206,157,49,.18)' : 'transparent', color: page === n.id ? 'var(--g)' : 'rgba(255,255,255,.55)', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 } }, n.label); }),
-        React.createElement('div', { style: { width: 1, height: 18, background: 'rgba(255,255,255,.1)', margin: '0 6px' } }),
-        React.createElement('span', { style: { fontSize: 12, color: 'rgba(255,255,255,.5)' } }, user.name.split(' ')[0]),
-        React.createElement('button', { className: 'btn', style: { fontSize: 11, padding: '4px 10px', background: 'rgba(255,255,255,.08)', color: 'rgba(255,255,255,.6)' }, onClick: logout }, 'Out')
+      React.createElement('div', { style: { display: 'flex', gap: 2, alignItems: 'center' } },
+        navItems.map(function(n) { return React.createElement('button', { key: n.id, onClick: function() { setPage(n.id); if (n.id === 'report') setDP('dashboard'); }, style: { padding: '7px 14px', borderRadius: 6, background: page === n.id ? 'rgba(206,157,49,.15)' : 'transparent', color: page === n.id ? 'var(--g)' : 'rgba(255,255,255,.5)', border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, transition: 'all .2s ease', letterSpacing: '.2px' } }, n.label); }),
+        React.createElement('div', { style: { width: 1, height: 20, background: 'rgba(255,255,255,.1)', margin: '0 10px' } }),
+        React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+          React.createElement('div', { style: { width: 28, height: 28, borderRadius: '50%', background: 'rgba(206,157,49,.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--g)' } }, user.name.charAt(0).toUpperCase()),
+          React.createElement('span', { style: { fontSize: 12, color: 'rgba(255,255,255,.55)', fontWeight: 500 } }, user.name.split(' ')[0]),
+          React.createElement('button', { style: { fontSize: 11, padding: '5px 12px', background: 'rgba(255,255,255,.06)', color: 'rgba(255,255,255,.5)', border: '1px solid rgba(255,255,255,.08)', borderRadius: 5, cursor: 'pointer', fontWeight: 600, transition: 'all .2s ease' }, onClick: logout }, 'Sign Out')
+        )
       )
     ),
     React.createElement('div', { className: 'main-c' },
       page === 'home' ? React.createElement('div', null,
-        React.createElement('div', { style: { marginBottom: 20 } }, React.createElement('h1', { style: { fontSize: 22 } }, 'Welcome, ', user.name.split(' ')[0]), React.createElement('div', { style: { height: 2, width: 50, background: 'var(--g)', marginTop: 8 } })),
+        React.createElement('div', { style: { marginBottom: 24 } }, React.createElement('h1', { style: { fontSize: 24, letterSpacing: '-.2px' } }, 'Welcome, ', user.name.split(' ')[0]), React.createElement('div', { style: { height: 3, width: 48, background: 'linear-gradient(90deg, var(--g), rgba(206,157,49,.3))', marginTop: 10, borderRadius: 2 } })),
         orgs.length === 0 ? React.createElement('div', { className: 'card', style: { textAlign: 'center', padding: 48 } },
           React.createElement('h2', { style: { fontSize: 20, marginBottom: 8 } }, 'Add Your Organization'),
           React.createElement('p', { className: 'mt', style: { marginBottom: 16 } }, 'Create an organization profile to begin the assessment.'),
           React.createElement('button', { className: 'btn btn-g', onClick: function() { setOF({ name: '' }); setPage('org_edit'); } }, 'Add Organization')
         )
         : co ? React.createElement('div', null,
-          React.createElement('div', { className: 'card', style: { padding: 16, marginBottom: 16 } }, React.createElement('div', { style: { fontSize: 11, color: 'var(--mt)', fontWeight: 600 } }, 'ACTIVE ORGANIZATION'), React.createElement('div', { style: { fontSize: 18, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, co.name),
+          React.createElement('div', { className: 'card', style: { padding: 18, marginBottom: 18 } }, React.createElement('div', { style: { fontSize: 10, color: 'var(--mt)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: 4 } }, 'Active Organization'), React.createElement('div', { style: { fontSize: 18, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, co.name),
             orgs.length > 1 ? React.createElement('select', { className: 'inp', style: { marginTop: 8, maxWidth: 300 }, value: activeOrg || '', onChange: async function(e) { setAO(e.target.value); await loadOrg(e.target.value); } }, orgs.map(function(o) { return React.createElement('option', { key: o.id, value: o.id }, o.name); })) : null
           ),
-          React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 12, marginBottom: 20 } },
-            React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid ' + (progressPct > 50 ? 'var(--gr)' : 'var(--am)') } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Progress'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, progressPct, '%')),
-            React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid var(--bl)' } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Team'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, invites.length, ' invited')),
-            React.createElement('div', { className: 'card', style: { padding: 16, borderTop: '3px solid ' + (report ? 'var(--gr)' : 'var(--mt)') } }, React.createElement('div', { className: 'mt', style: { fontWeight: 600 } }, 'Report'), React.createElement('div', { style: { fontSize: 22, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, report ? 'Ready' : 'Pending'))
+          React.createElement('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 14, marginBottom: 24 } },
+            React.createElement('div', { className: 'card', style: { padding: 18, borderTop: '3px solid ' + (progressPct > 50 ? 'var(--gr)' : 'var(--am)'), cursor: 'pointer' }, onClick: function() { setPage('assess'); setCurSec(0); } },
+              React.createElement('div', { className: 'mt', style: { fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '1px' } }, 'Progress'),
+              React.createElement('div', { style: { fontSize: 28, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif", marginTop: 4 } }, progressPct, '%'),
+              React.createElement('div', { style: { height: 3, background: 'var(--br)', borderRadius: 2, marginTop: 8, overflow: 'hidden' } }, React.createElement('div', { style: { height: '100%', width: progressPct + '%', background: progressPct > 50 ? 'var(--gr)' : 'var(--am)', borderRadius: 2, transition: 'width .5s ease' } }))
+            ),
+            React.createElement('div', { className: 'card', style: { padding: 18, borderTop: '3px solid var(--bl)', cursor: 'pointer' }, onClick: function() { setPage('team'); } },
+              React.createElement('div', { className: 'mt', style: { fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '1px' } }, 'Team'),
+              React.createElement('div', { style: { fontSize: 28, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif", marginTop: 4 } }, invites.length),
+              React.createElement('div', { className: 'mt', style: { marginTop: 4 } }, 'invited')
+            ),
+            React.createElement('div', { className: 'card', style: { padding: 18, borderTop: '3px solid ' + (report ? 'var(--gr)' : 'var(--mt)') } },
+              React.createElement('div', { className: 'mt', style: { fontWeight: 600, fontSize: 10, textTransform: 'uppercase', letterSpacing: '1px' } }, 'Report'),
+              React.createElement('div', { style: { fontSize: 28, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif", color: report ? 'var(--gr)' : 'var(--mt)', marginTop: 4 } }, report ? 'Ready' : 'Pending'),
+              report ? React.createElement('div', { className: 'mt', style: { marginTop: 4 } }, 'Click View Report below') : null
+            )
           ),
           React.createElement('div', { className: 'card' }, React.createElement('h3', { style: { fontSize: 16, marginBottom: 12 } }, 'Quick Actions'),
             React.createElement('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
@@ -896,12 +920,12 @@ export default function App() {
         )
       ) : null
     ),
-    React.createElement('div', { style: { background: 'var(--n)', padding: '24px 20px', textAlign: 'center', marginTop: 40 } },
-      React.createElement('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 4 } },
-        React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 20, height: 20, borderRadius: '50%' } }),
-        React.createElement('span', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 14, color: '#fff' } }, 'Provident Accountability')
+    React.createElement('div', { style: { background: 'linear-gradient(135deg, #0c2e3e 0%, #0a2532 100%)', padding: '28px 20px', textAlign: 'center', marginTop: 48 } },
+      React.createElement('div', { style: { display: 'inline-flex', alignItems: 'center', gap: 10, marginBottom: 6 } },
+        React.createElement('img', { src: '/logo-icon.svg', alt: 'Provident', style: { width: 20, height: 20, borderRadius: '50%', opacity: .8 } }),
+        React.createElement('span', { style: { fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 14, color: 'rgba(255,255,255,.7)' } }, 'Provident Accountability')
       ),
-      React.createElement('div', { style: { fontSize: 11, color: 'rgba(255,255,255,.3)', marginTop: 4, fontFamily: "'Montserrat',sans-serif" } }, 'providentstrat.com')
+      React.createElement('div', { style: { fontSize: 11, color: 'rgba(255,255,255,.25)', marginTop: 4, fontFamily: "'Montserrat',sans-serif", letterSpacing: '.3px' } }, 'providentstrat.com')
     )
   );
 }
