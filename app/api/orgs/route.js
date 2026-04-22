@@ -1,5 +1,6 @@
 import { sql } from '@vercel/postgres';
 import { requireAuth, generateUUID, respond, checkOrgAccess, getOrgRole } from '../../../lib/auth';
+import { canCreateOrg, PRODUCTS, formatPrice } from '../../../lib/billing';
 
 const ORG_FIELDS = ['org_type','annual_budget','employees_ft','employees_pt','contractors','volunteers','locations',
   'address_street','address_city','address_state','address_zip','year_founded',
@@ -100,6 +101,22 @@ export async function POST(request) {
     const input = await request.json().catch(() => ({}));
     const name = (input.name || '').trim();
     if (!name) return respond({ error: 'Name required' }, 400);
+
+    // Check if user can create another org (first is free, additional require purchase)
+    try {
+      const orgCheck = await canCreateOrg(user.id);
+      if (!orgCheck.allowed) {
+        return respond({
+          error: 'Additional organization requires upgrade',
+          requires_purchase: true,
+          product: { ...PRODUCTS.additional_org, price: formatPrice(PRODUCTS.additional_org.price_cents) },
+          orgCount: orgCheck.orgCount,
+        }, 402);
+      }
+    } catch (e) {
+      // Billing table may not exist yet — allow creation (graceful fallback)
+      console.warn('Org creation billing check skipped:', e.message);
+    }
 
     const uuid = generateUUID();
 

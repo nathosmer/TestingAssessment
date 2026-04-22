@@ -97,6 +97,9 @@ export default function App() {
   var [ipWords, setIPW] = useState([]); var [ipWhy, setIPWhy] = useState('');
   var [orgMembers, setOrgMembers] = useState([]);
   var [adminData, setAdminData] = useState({ orgs: [], users: [], stats: null });
+  var [showUpgrade, setShowUpgrade] = useState(null); // { product, message, orgCount }
+  var [detailedReportStatus, setDRS] = useState(null); // null | 'checking' | 'generating' | 'ready' | 'needs_purchase'
+  var [detailedReport, setDR] = useState(null);
 
   var saveTimer = useRef(null);
   var [saveStatus, setSaveStatus] = useState('');
@@ -105,6 +108,7 @@ export default function App() {
   useEffect(function() {
     if (page === 'team' && activeOrg && user) { loadMembers(); }
     if (page === 'admin' && user && user.site_role === 'super_admin') { loadAdminData(); }
+    if (page === 'report' && activeOrg && user && !detailedReportStatus) { checkDetailedReportStatus(); }
   }, [page, activeOrg]);
 
   useEffect(function() {
@@ -351,6 +355,49 @@ export default function App() {
     return co ? (co.my_role || 'respondent') : null;
   }
   function isOrgAdmin() { var r = getMyOrgRole(); return r === 'admin' || r === 'super_admin'; }
+
+  // Billing / Monetization functions
+  async function checkDetailedReportStatus() {
+    if (!activeOrg) return;
+    setDRS('checking');
+    var r = await G('detailed-report?org_id=' + activeOrg);
+    if (r.has_report) { setDRS('ready'); setDR(r.report); }
+    else if (r.entitled) { setDRS('entitled'); }
+    else { setDRS('needs_purchase'); }
+  }
+
+  async function requestPurchase(productId, orgId) {
+    var r = await P('billing?action=request_purchase', { product_id: productId, org_id: orgId || null });
+    if (r.error && !r.requires_purchase) { toast('Error: ' + r.error); return r; }
+    if (r.already_purchased) { toast('Already purchased!'); return r; }
+    if (r.soft_paywall) {
+      setShowUpgrade({ product: r.product, message: r.message, contact: r.contact_email, purchaseId: r.purchase_id });
+    }
+    return r;
+  }
+
+  async function generateDetailedReport() {
+    if (!activeOrg) return;
+    setDRS('generating'); setLoading('Generating detailed report... This may take 1-2 minutes.');
+    var r = await P('detailed-report?org_id=' + activeOrg, {});
+    setLoading(null);
+    if (r.error) {
+      if (r.requires_purchase) {
+        setDRS('needs_purchase');
+        setShowUpgrade({ product: r.product, message: 'Purchase a detailed report to unlock this feature.' });
+      } else { toast('Error: ' + r.error); setDRS('entitled'); }
+      return;
+    }
+    setDRS('ready'); setDR(r.report); toast('Detailed report generated!');
+  }
+
+  async function tryAddOrg() {
+    var r = await G('billing?action=can_create_org');
+    if (r.allowed) { setOF({ name: '' }); setPage('org_edit'); }
+    else {
+      setShowUpgrade({ product: r.product || { name: 'Additional Organization', price: '$99', description: 'Add another organization.' }, message: 'Your first organization is free. Additional organizations require an upgrade.', orgCount: r.orgCount });
+    }
+  }
 
   function secQs(sec) { return questions.filter(function(q) { return Number(q.section_number) === sec && q.part === 'S' && !q.version_retired; }); }
   function setPulseW(point, word) {
@@ -643,6 +690,7 @@ export default function App() {
     var sideSecs = [{ id: 'dashboard', label: 'Dashboard' }, { id: 'summary', label: 'Executive Summary' }, { id: 'team_rpt', label: 'Your Team' }, { id: 'emotions', label: 'Emotional Landscape' }];
     for (var i = 0; i < 13; i++) sideSecs.push({ id: 'sec_' + (i + 1), label: (i + 1) + '. ' + SECS[i].split(' & ')[0].split(',')[0], score: SCORES[i], pri: PRIS[i] });
     sideSecs.push({ id: 'priorities', label: 'Top 5 Priorities' }, { id: 'keyrisk', label: 'Key Person Risk' }, { id: 'mission', label: 'Mission & Alignment' });
+    if (detailedReportStatus === 'ready') sideSecs.push({ id: 'detailed', label: '\u2605 Detailed Report' });
 
     var content = null;
 
@@ -664,7 +712,30 @@ export default function App() {
             React.createElement('svg', { viewBox: '0 0 380 380', width: 400 }, grid, React.createElement('polygon', { points: poly, fill: 'rgba(206,157,49,.15)', stroke: 'var(--g)', strokeWidth: 2 }), dots, React.createElement('circle', { cx: 190, cy: 190, r: 22, fill: 'var(--n)' }), React.createElement('text', { x: 190, y: 194, textAnchor: 'middle', fill: 'var(--g)', fontFamily: "'Goudy Bookletter 1911','Georgia',serif", fontWeight: 700, fontSize: 16 }, R.overall_score), labels)
           )
         ),
-        React.createElement('div', { className: 'card' }, SECS.map(function(s, i) { return React.createElement('div', { key: i, className: 'bar-r' }, React.createElement('div', { className: 'bar-l', style: { cursor: 'pointer' }, onClick: function() { setDP('sec_' + (i + 1)); } }, s.split(' & ')[0].split(',')[0]), React.createElement('div', { className: 'bar-t' }, React.createElement('div', { className: 'bar-f', style: { width: (SCORES[i] / 5 * 100) + '%', background: sc(SCORES[i]) } })), React.createElement('div', { className: 'bar-sc', style: { color: sc(SCORES[i]) } }, SCORES[i] != null ? SCORES[i].toFixed(1) : '—'), React.createElement('span', { className: 'pri ' + (PRIS[i] === 'HIGH' ? 'pri-h' : PRIS[i] === 'MEDIUM' ? 'pri-m' : 'pri-l') }, PRIS[i])); }))
+        React.createElement('div', { className: 'card', style: { marginBottom: 20 } }, SECS.map(function(s, i) { return React.createElement('div', { key: i, className: 'bar-r' }, React.createElement('div', { className: 'bar-l', style: { cursor: 'pointer' }, onClick: function() { setDP('sec_' + (i + 1)); } }, s.split(' & ')[0].split(',')[0]), React.createElement('div', { className: 'bar-t' }, React.createElement('div', { className: 'bar-f', style: { width: (SCORES[i] / 5 * 100) + '%', background: sc(SCORES[i]) } })), React.createElement('div', { className: 'bar-sc', style: { color: sc(SCORES[i]) } }, SCORES[i] != null ? SCORES[i].toFixed(1) : '\u2014'), React.createElement('span', { className: 'pri ' + (PRIS[i] === 'HIGH' ? 'pri-h' : PRIS[i] === 'MEDIUM' ? 'pri-m' : 'pri-l') }, PRIS[i])); })),
+
+        // Detailed PDF Report CTA
+        React.createElement('div', { style: { background: 'linear-gradient(135deg, #0c2e3e 0%, #1a4a5c 100%)', borderRadius: 10, padding: 28, border: '1px solid rgba(206,157,49,.2)' } },
+          React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' } },
+            React.createElement('div', { style: { flex: 1, minWidth: 200 } },
+              React.createElement('h3', { style: { color: 'var(--g)', fontSize: 17, marginBottom: 6, fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, 'Detailed Assessment Report'),
+              React.createElement('p', { style: { color: 'rgba(255,255,255,.6)', fontSize: 13, lineHeight: 1.6, marginBottom: 0 } }, 'Get a comprehensive, board-ready PDF report with deep-dive analysis of all 13 sections, respondent perception gaps, emotional landscape mapping, key person risk assessment, and prioritized action plan.')
+            ),
+            React.createElement('div', { style: { textAlign: 'center' } },
+              detailedReportStatus === 'ready' ?
+                React.createElement('button', { className: 'btn btn-g', style: { fontSize: 13 }, onClick: function() { setDP('detailed'); } }, 'View Detailed Report') :
+              detailedReportStatus === 'generating' ?
+                React.createElement('button', { className: 'btn btn-g', disabled: true, style: { fontSize: 13 } }, 'Generating...') :
+              detailedReportStatus === 'entitled' ?
+                React.createElement('button', { className: 'btn btn-g', style: { fontSize: 13 }, onClick: generateDetailedReport }, 'Generate Report') :
+              React.createElement('div', null,
+                React.createElement('div', { style: { color: 'var(--g)', fontSize: 24, fontWeight: 700, fontFamily: "'Goudy Bookletter 1911','Georgia',serif", marginBottom: 4 } }, '$49'),
+                React.createElement('button', { className: 'btn btn-g', style: { fontSize: 13 }, onClick: function() { requestPurchase('detailed_report', activeOrg).then(function(r) { if (r && r.already_purchased) { setDRS('entitled'); } }); } }, 'Upgrade'),
+                React.createElement('div', { style: { color: 'rgba(255,255,255,.35)', fontSize: 10, marginTop: 4 } }, 'One-time purchase')
+              )
+            )
+          )
+        )
       );
     }
 
@@ -690,6 +761,74 @@ export default function App() {
         sec.recommendations && sec.recommendations.length > 0 ? React.createElement('div', { className: 'fb fb-r' }, React.createElement('h4', null, '→ Recommended Actions'), React.createElement('ol', null, sec.recommendations.map(function(r, i) { return React.createElement('li', { key: i }, r); }))) : null,
         sec.vision ? React.createElement('div', { className: 'fb fb-v' }, React.createElement('h4', null, '✦ Your Vision'), React.createElement('p', null, sec.vision)) : null,
         sec.pulse_narrative ? React.createElement('p', { className: 'mt', style: { marginTop: 12 } }, sec.pulse_narrative) : null,
+        React.createElement('div', { className: 'cta-card' }, React.createElement('h3', null, 'Want help implementing these recommendations?'), React.createElement('p', null, 'Provident Strategic Advisers specializes in nonprofit financial stewardship.'), React.createElement('a', { href: 'https://providentstrat.com', target: '_blank' }, 'Learn More'))
+      );
+    }
+
+    // Detailed Report Viewer
+    if (dashPage === 'detailed' && detailedReport) {
+      var DR = detailedReport.report_json || detailedReport;
+      content = React.createElement('div', null,
+        React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 } },
+          React.createElement('h1', { className: 'pg-t' }, 'Detailed Assessment Report'),
+          React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12, padding: '5px 14px' }, onClick: function() { window.print(); } }, 'Print / Save PDF')
+        ),
+        // Executive Summary
+        DR.executive_summary ? React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
+          React.createElement('h3', { style: { fontSize: 16, marginBottom: 12, color: 'var(--g)' } }, 'Executive Summary'),
+          DR.executive_summary.split('\n').filter(Boolean).map(function(p, i) { return React.createElement('p', { key: i, style: { fontSize: 14, lineHeight: 1.8, marginBottom: 12 } }, p); })
+        ) : null,
+        // Respondent Overview
+        DR.respondent_overview ? React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
+          React.createElement('h3', { style: { fontSize: 16, marginBottom: 12, color: 'var(--g)' } }, 'Respondent Overview'),
+          (DR.respondent_overview.narrative || '').split('\n').filter(Boolean).map(function(p, i) { return React.createElement('p', { key: i, style: { fontSize: 13, lineHeight: 1.7, marginBottom: 10 } }, p); })
+        ) : null,
+        // Emotional Landscape
+        DR.emotional_landscape ? React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
+          React.createElement('h3', { style: { fontSize: 16, marginBottom: 12, color: 'var(--g)' } }, 'Emotional Landscape'),
+          (DR.emotional_landscape.aggregate_narrative || '').split('\n').filter(Boolean).map(function(p, i) { return React.createElement('p', { key: i, style: { fontSize: 13, lineHeight: 1.7, marginBottom: 10 } }, p); }),
+          DR.emotional_landscape.section_patterns ? React.createElement('div', { className: 'fb fb-n', style: { marginTop: 12 } },
+            React.createElement('h4', null, 'Section Patterns'),
+            DR.emotional_landscape.section_patterns.split('\n').filter(Boolean).map(function(p, i) { return React.createElement('p', { key: i }, p); })
+          ) : null
+        ) : null,
+        // Section Scorecard
+        DR.section_scorecard_narrative ? React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
+          React.createElement('h3', { style: { fontSize: 16, marginBottom: 12, color: 'var(--g)' } }, 'Section Scorecard Overview'),
+          DR.section_scorecard_narrative.split('\n').filter(Boolean).map(function(p, i) { return React.createElement('p', { key: i, style: { fontSize: 13, lineHeight: 1.7, marginBottom: 10 } }, p); })
+        ) : null,
+        // Individual Sections
+        (DR.sections || []).map(function(sec) {
+          return React.createElement('div', { key: sec.number, className: 'card', style: { marginBottom: 16 } },
+            React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 } },
+              React.createElement('div', { className: 'sec-sc', style: { color: sc(sec.score || 2.5), fontSize: 28 } }, sec.score ? sec.score.toFixed(1) : '\u2014'),
+              React.createElement('div', null,
+                React.createElement('h3', { style: { fontSize: 16, margin: 0 } }, 'Section ', sec.number, ': ', sec.title),
+                React.createElement('span', { className: 'pri ' + (sec.priority === 'HIGH' ? 'pri-h' : sec.priority === 'MEDIUM' ? 'pri-m' : 'pri-l'), style: { marginTop: 4, display: 'inline-block' } }, sec.priority, ' Priority')
+              )
+            ),
+            (sec.analysis || '').split('\n').filter(Boolean).map(function(p, i) { return React.createElement('p', { key: i, style: { fontSize: 13, lineHeight: 1.7, marginBottom: 10 } }, p); }),
+            sec.strengths && sec.strengths.length > 0 ? React.createElement('div', { className: 'fb fb-s', style: { marginTop: 8 } }, React.createElement('h4', null, 'Strengths'), React.createElement('ul', null, sec.strengths.map(function(s, i) { return React.createElement('li', { key: i }, s); }))) : null,
+            sec.concerns && sec.concerns.length > 0 ? React.createElement('div', { className: 'fb fb-c' }, React.createElement('h4', null, 'Areas for Growth'), React.createElement('ul', null, sec.concerns.map(function(c, i) { return React.createElement('li', { key: i }, c); }))) : null,
+            sec.recommendations && sec.recommendations.length > 0 ? React.createElement('div', { className: 'fb fb-r' }, React.createElement('h4', null, 'Recommendations'), React.createElement('ol', null, sec.recommendations.map(function(r, i) { return React.createElement('li', { key: i, style: { marginBottom: 8 } }, React.createElement('strong', null, r.action || r), r.timeline ? React.createElement('span', { className: 'mt' }, ' \u2014 ', r.timeline, r.owner ? ' (Owner: ' + r.owner + ')' : '') : null); }))) : null,
+            sec.emotional_note ? React.createElement('p', { className: 'mt', style: { marginTop: 8, fontStyle: 'italic' } }, sec.emotional_note) : null
+          );
+        }),
+        // Key Person Risk
+        DR.key_person_risk ? React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
+          React.createElement('h3', { style: { fontSize: 16, marginBottom: 12, color: 'var(--g)' } }, 'Key Person Risk'),
+          (DR.key_person_risk.narrative || '').split('\n').filter(Boolean).map(function(p, i) { return React.createElement('p', { key: i, style: { fontSize: 13, lineHeight: 1.7, marginBottom: 10 } }, p); })
+        ) : null,
+        // Mission Alignment
+        DR.mission_alignment ? React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
+          React.createElement('h3', { style: { fontSize: 16, marginBottom: 12, color: 'var(--g)' } }, 'Mission & Alignment'),
+          (DR.mission_alignment.narrative || '').split('\n').filter(Boolean).map(function(p, i) { return React.createElement('p', { key: i, style: { fontSize: 13, lineHeight: 1.7, marginBottom: 10 } }, p); })
+        ) : null,
+        // Conclusion
+        DR.conclusion ? React.createElement('div', { className: 'card', style: { marginBottom: 16 } },
+          React.createElement('h3', { style: { fontSize: 16, marginBottom: 12, color: 'var(--g)' } }, 'Conclusion & Path Forward'),
+          DR.conclusion.split('\n').filter(Boolean).map(function(p, i) { return React.createElement('p', { key: i, style: { fontSize: 14, lineHeight: 1.8, marginBottom: 12 } }, p); })
+        ) : null,
         React.createElement('div', { className: 'cta-card' }, React.createElement('h3', null, 'Want help implementing these recommendations?'), React.createElement('p', null, 'Provident Strategic Advisers specializes in nonprofit financial stewardship.'), React.createElement('a', { href: 'https://providentstrat.com', target: '_blank' }, 'Learn More'))
       );
     }
@@ -739,8 +878,36 @@ export default function App() {
   if (report) navItems.push({ id: 'report', label: 'Report' });
   if (isSuperAdmin()) navItems.push({ id: 'admin', label: 'Admin' });
 
+  // Upgrade Modal
+  var upgradeModal = showUpgrade ? React.createElement('div', { style: { position: 'fixed', inset: 0, background: 'rgba(12,46,62,.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, backdropFilter: 'blur(4px)' }, onClick: function() { setShowUpgrade(null); } },
+    React.createElement('div', { style: { background: 'var(--w)', borderRadius: 12, padding: 32, maxWidth: 440, width: '90%', boxShadow: '0 8px 32px rgba(0,0,0,.2)' }, onClick: function(e) { e.stopPropagation(); } },
+      React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 16 } },
+        React.createElement('h2', { style: { fontSize: 20, margin: 0 } }, 'Upgrade Required'),
+        React.createElement('button', { style: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--mt)', padding: '0 4px' }, onClick: function() { setShowUpgrade(null); } }, '\u2715')
+      ),
+      React.createElement('div', { style: { background: 'var(--bg)', borderRadius: 8, padding: 16, marginBottom: 16 } },
+        React.createElement('div', { style: { fontSize: 16, fontWeight: 700, color: 'var(--n)', marginBottom: 4 } }, showUpgrade.product ? showUpgrade.product.name : ''),
+        React.createElement('p', { style: { fontSize: 13, color: 'var(--mt)', lineHeight: 1.6, marginBottom: 8 } }, showUpgrade.product ? showUpgrade.product.description : ''),
+        React.createElement('div', { style: { fontSize: 28, fontWeight: 700, color: 'var(--g)', fontFamily: "'Goudy Bookletter 1911','Georgia',serif" } }, showUpgrade.product ? showUpgrade.product.price : '')
+      ),
+      showUpgrade.message ? React.createElement('p', { style: { fontSize: 13, color: 'var(--bd)', lineHeight: 1.6, marginBottom: 16 } }, showUpgrade.message) : null,
+      showUpgrade.contact ? React.createElement('div', { style: { marginBottom: 16 } },
+        React.createElement('p', { style: { fontSize: 13, color: 'var(--mt)', marginBottom: 4 } }, 'Contact us to complete your purchase:'),
+        React.createElement('a', { href: 'mailto:' + showUpgrade.contact, style: { fontSize: 14, fontWeight: 600, color: 'var(--n)', textDecoration: 'none' } }, showUpgrade.contact)
+      ) : null,
+      React.createElement('div', { style: { display: 'flex', gap: 8 } },
+        React.createElement('button', { className: 'btn btn-g', style: { flex: 1 }, onClick: function() {
+          if (showUpgrade.contact) { window.location.href = 'mailto:' + showUpgrade.contact + '?subject=Provident Upgrade Request&body=I would like to purchase: ' + (showUpgrade.product ? showUpgrade.product.name : '') + (showUpgrade.purchaseId ? ' (Ref: ' + showUpgrade.purchaseId + ')' : ''); }
+          setShowUpgrade(null);
+        } }, 'Contact Us'),
+        React.createElement('button', { className: 'btn btn-o', onClick: function() { setShowUpgrade(null); } }, 'Maybe Later')
+      )
+    )
+  ) : null;
+
   return React.createElement('div', { style: { minHeight: '100vh', background: 'var(--bg)' } },
     loadingEl,
+    upgradeModal,
     React.createElement('div', { id: 'toast', className: 'toast' }),
     React.createElement('div', { className: 'nav-top' },
       React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }, onClick: function() { flushSaveTimer(); setPage('home'); } },
@@ -798,7 +965,7 @@ export default function App() {
             ),
             myRole ? React.createElement('div', { className: 'mt', style: { marginTop: 8 } }, 'Your role: ', React.createElement('span', { style: { fontWeight: 600, color: 'var(--n)' } }, myRole === 'super_admin' ? 'Super Admin' : myRole.charAt(0).toUpperCase() + myRole.slice(1))) : null
           ),
-          isOrgAdmin() ? React.createElement('div', { style: { marginTop: 16, display: 'flex', gap: 8 } }, React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12 }, onClick: function() { setOF(Object.assign({ id: co.id }, co)); setPage('org_edit'); } }, 'Edit Organization'), React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12 }, onClick: function() { setOF({ name: '' }); setPage('org_edit'); } }, '+ Add Organization')) : null
+          isOrgAdmin() ? React.createElement('div', { style: { marginTop: 16, display: 'flex', gap: 8 } }, React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12 }, onClick: function() { setOF(Object.assign({ id: co.id }, co)); setPage('org_edit'); } }, 'Edit Organization'), React.createElement('button', { className: 'btn btn-o', style: { fontSize: 12 }, onClick: tryAddOrg }, '+ Add Organization')) : null
         ) : null
       ) : null,
 

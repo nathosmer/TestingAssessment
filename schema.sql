@@ -247,3 +247,23 @@ CREATE TABLE IF NOT EXISTS reports (
 );
 CREATE INDEX IF NOT EXISTS idx_reports_assessment ON reports(assessment_id);
 CREATE INDEX IF NOT EXISTS idx_reports_org ON reports(org_id);
+
+-- Billing / Purchases (monetization infrastructure)
+CREATE TABLE IF NOT EXISTS purchases (
+    id BIGSERIAL PRIMARY KEY,
+    uuid VARCHAR(36) NOT NULL UNIQUE,
+    user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    org_id BIGINT DEFAULT NULL REFERENCES organizations(id) ON DELETE SET NULL,
+    product_id VARCHAR(50) NOT NULL,
+    amount_cents INT NOT NULL DEFAULT 0,
+    currency VARCHAR(3) NOT NULL DEFAULT 'usd',
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    payment_method VARCHAR(20) DEFAULT 'contact',
+    payment_ref VARCHAR(255) DEFAULT NULL,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ DEFAULT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_purchases_user ON purchases(user_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_org ON purchases(org_id);
+CREATE INDEX IF NOT EXISTS idx_purchases_product ON purchases(product_id);
