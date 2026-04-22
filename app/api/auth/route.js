@@ -5,6 +5,24 @@ import { sendResetEmail } from '../../../lib/email';
 
 const SESSION_LIFETIME_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
+// One-time migration flag — ensures columns exist on first request
+let columnsVerified = false;
+async function ensureColumns() {
+  if (columnsVerified) return;
+  try {
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS site_role VARCHAR(20) DEFAULT 'user'`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ DEFAULT NULL`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR(100) DEFAULT NULL`;
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires TIMESTAMPTZ DEFAULT NULL`;
+    columnsVerified = true;
+  } catch (e) {
+    // If ALTER fails (permissions), assume columns already exist
+    console.warn('Column check skipped:', e.message);
+    columnsVerified = true;
+  }
+}
+
 export async function OPTIONS() {
   return new Response(null, { status: 200 });
 }
@@ -24,16 +42,29 @@ export async function GET(request) {
         if (match) token = match[1];
       }
       if (!token) return respond({ authenticated: false });
-      const result = await sql`
-        SELECT u.id, u.uuid, u.name, u.email, u.site_role
-        FROM sessions s JOIN users u ON s.user_id = u.id
-        WHERE s.token = ${token} AND s.expires_at > NOW()
-      `;
-      const u = result.rows[0];
+
+      // Try with site_role first, fall back to without it
+      let u;
+      try {
+        const result = await sql`
+          SELECT u.id, u.uuid, u.name, u.email, u.site_role
+          FROM sessions s JOIN users u ON s.user_id = u.id
+          WHERE s.token = ${token} AND s.expires_at > NOW()
+        `;
+        u = result.rows[0];
+      } catch (e) {
+        // site_role column may not exist yet
+        const result = await sql`
+          SELECT u.id, u.uuid, u.name, u.email
+          FROM sessions s JOIN users u ON s.user_id = u.id
+          WHERE s.token = ${token} AND s.expires_at > NOW()
+        `;
+        u = result.rows[0];
+      }
       if (!u) return respond({ authenticated: false });
       if (!u.site_role) u.site_role = 'user';
 
-      // Clean up expired sessions (L-04)
+      // Clean up expired sessions
       try {
         await sql`DELETE FROM sessions WHERE expires_at < NOW()`;
       } catch (e) {
@@ -85,16 +116,30 @@ export async function POST(request) {
       const email = (input.email || '').toLowerCase().trim();
       const pass = input.password || '';
       if (!email || !pass) return respond({ error: 'Email and password required' }, 400);
-      const result = await sql`SELECT id, uuid, name, email, password_hash, site_role FROM users WHERE email = ${email} AND deleted_at IS NULL`;
-      const u = result.rows[0];
+
+      // Try with new columns first, fall back to basic query
+      let u;
+      try {
+        const result = await sql`SELECT id, uuid, name, email, password_hash, site_role FROM users WHERE email = ${email} AND deleted_at IS NULL`;
+        u = result.rows[0];
+      } catch (e) {
+        // site_role or deleted_at column may not exist yet
+        const result = await sql`SELECT id, uuid, name, email, password_hash FROM users WHERE email = ${email}`;
+        u = result.rows[0];
+      }
+
       if (!u || !(await bcrypt.compare(pass, u.password_hash))) return respond({ error: 'Invalid credentials' }, 401);
       await sql`DELETE FROM sessions WHERE user_id = ${u.id} AND expires_at < NOW()`;
       const token = generateToken();
       const exp = new Date(Date.now() + SESSION_LIFETIME_SECONDS * 1000).toISOString();
       await sql`INSERT INTO sessions (user_id, token, expires_at) VALUES (${u.id}, ${token}, ${exp})`;
-      await sql`UPDATE users SET last_login_at = NOW() WHERE id = ${u.id}`;
+      try { await sql`UPDATE users SET last_login_at = NOW() WHERE id = ${u.id}`; } catch (e) { /* column may not exist */ }
       let resp = respond({ user: { id: Number(u.id), uuid: u.uuid, name: u.name, email: u.email, site_role: u.site_role || 'user' }, token });
       resp = setAuthCookie(resp, token);
+
+      // Run column migration in background after successful login
+      ensureColumns().catch(() => {});
+
       return resp;
     } catch (error) {
       console.error('Login error:', error);
@@ -124,9 +169,16 @@ export async function POST(request) {
 
   if (action === 'forgot_password') {
     try {
+      await ensureColumns();
       const email = (input.email || '').toLowerCase().trim();
       if (!email) return respond({ error: 'Email required' }, 400);
-      const result = await sql`SELECT id, name FROM users WHERE email = ${email} AND deleted_at IS NULL`;
+
+      let result;
+      try {
+        result = await sql`SELECT id, name FROM users WHERE email = ${email} AND deleted_at IS NULL`;
+      } catch (e) {
+        result = await sql`SELECT id, name FROM users WHERE email = ${email}`;
+      }
       // Always return success to prevent email enumeration
       if (result.rows.length === 0) return respond({ ok: true, message: 'If that email exists, a reset link has been generated.' });
       const u = result.rows[0];
@@ -152,11 +204,18 @@ export async function POST(request) {
 
   if (action === 'reset_password') {
     try {
+      await ensureColumns();
       const resetToken = (input.token || '').trim();
       const newPass = input.password || '';
       if (!resetToken) return respond({ error: 'Reset token required' }, 400);
       if (!newPass || newPass.length < 8) return respond({ error: 'Password must be at least 8 characters' }, 400);
-      const result = await sql`SELECT id, email FROM users WHERE reset_token = ${resetToken} AND reset_token_expires > NOW() AND deleted_at IS NULL`;
+
+      let result;
+      try {
+        result = await sql`SELECT id, email FROM users WHERE reset_token = ${resetToken} AND reset_token_expires > NOW() AND deleted_at IS NULL`;
+      } catch (e) {
+        result = await sql`SELECT id, email FROM users WHERE reset_token = ${resetToken} AND reset_token_expires > NOW()`;
+      }
       if (result.rows.length === 0) return respond({ error: 'Invalid or expired reset link. Please request a new one.' }, 400);
       const u = result.rows[0];
       const hash = await bcrypt.hash(newPass, 10);
